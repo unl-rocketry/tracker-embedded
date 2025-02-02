@@ -3,22 +3,15 @@
 #include <Adafruit_MMA8451.h>
 
 // Altitude and Azimuth
-TicI2C tic1(14);
-TicI2C tic2(15);
-TicI2C tic_list[2] = {tic1, tic2};
+TicI2C motorVertical(14);
+TicI2C motorHorizontal(15);
 
 Adafruit_MMA8451 mma = Adafruit_MMA8451();
 float x, y, z;
 double roll = 0.00, pitch = 0.00;
-// double targetPitchSteps = 0.0;
+double targetPitchSteps = 0.0;
 double targetAzimuth = 0.0;
 int stepsPerDegree = 126.0;
-
-struct euler_t {
-  float yaw;
-  float pitch;
-  float roll;
-} ypr;
 
 unsigned long startTimeMS = 0;
 float startPitch = 0.0;
@@ -48,7 +41,7 @@ void setup() {
 
   Wire.begin();
 
-  delay(20);
+  delay(100);
 
   Serial.println("Starting MMA8451");
   if (!mma.begin()) {
@@ -61,21 +54,20 @@ void setup() {
   mma.setDataRate(mma8451_dataRate_t::MMA8451_DATARATE_50_HZ);
 
   // Set up motor driver(s)
-  for (TicI2C tic : tic_list) {
-    tic.setProduct(TicProduct::Tic36v4);
-    tic.setCurrentLimit(1024);
-    tic.setAgcFrequencyLimit(TicAgcFrequencyLimit::F675Hz);
-    tic.haltAndSetPosition(0);
-    // Default is 7,000,000
-    tic.setMaxSpeed(7000000);
-    tic.setStepMode(TicStepMode::Full);
+  setupMotor(motorVertical);
+  setupMotor(motorHorizontal);
+}
 
-    tic.exitSafeStart();
-  }
+void setupMotor(TicI2C motor) {
+  motor.setProduct(TicProduct::Tic36v4);
+  motor.setCurrentLimit(1024);
+  motor.setAgcFrequencyLimit(TicAgcFrequencyLimit::F675Hz);
+  motor.haltAndSetPosition(0);
+  // Default is 7,000,000
+  motor.setMaxSpeed(7000000);
+  motor.setStepMode(TicStepMode::Full);
 
-  Serial.println("Calibrating...");
-  calibrateVertical();
-  Serial.println("Finished calibration!");
+  motor.exitSafeStart();
 }
 
 void calibrateVertical() {
@@ -91,10 +83,10 @@ void calibrateVertical() {
       delay(20);
     }
     pitchSum /= 20;
-    Serial.println(pitchSum);
+    //Serial.println(pitchSum);
 
     // Prevents movement from erroring out
-    resetCommandTimeout(tic2);
+    resetCommandTimeout(motorHorizontal);
 
     if (abs(pitchSum - ZERO_CAL) < 3.0) {
       targetVelocity = 500000;
@@ -104,15 +96,15 @@ void calibrateVertical() {
     }
     
     if (pitchSum <= -0.02) {
-      tic2.setTargetVelocity(targetVelocity);
+      motorHorizontal.setTargetVelocity(targetVelocity);
     } else if (pitchSum >= 0.02) {
-      tic2.setTargetVelocity(-targetVelocity);
+      motorHorizontal.setTargetVelocity(-targetVelocity);
     } else {
-      tic2.haltAndSetPosition(0);
+      motorHorizontal.haltAndSetPosition(0);
       break;
     }
     delay(200);
-    tic2.setTargetVelocity(0);
+    motorHorizontal.setTargetVelocity(0);
   }
 
   Serial.println("Zeroing calibration finished!");
@@ -122,24 +114,13 @@ void resetCommandTimeout(TicI2C tic) {
   tic.resetCommandTimeout();
 }
 
-// Delays for the specified number of milliseconds while
-// resetting the Tic's command timeout so that its movement does
-// not get interrupted by errors.
-void delayWhileResettingCommandTimeout(uint32_t ms, TicI2C tic) {
-  uint32_t start = millis();
-  do
-  {
-    resetCommandTimeout(tic);
-  } while ((uint32_t)(millis() - start) <= ms);
-}
-
 void loop() {
   // Prevents movement from erroring out
-  tic1.resetCommandTimeout();
-  tic2.resetCommandTimeout();
+  motorVertical.resetCommandTimeout();
+  motorHorizontal.resetCommandTimeout();
 
   if (Serial.available() > 0) {
-    String str = Serial.readString();
+    String str = Serial.readBytesUntil('\n')();
     str.trim();
     int position = str.toFloat();
 
@@ -153,8 +134,8 @@ void loop() {
     Serial.println("°");
 
     targetPitchSteps = position * float(stepsPerDegree); //targetAzimuth was changed to targetPitchSteps by Manas to fix tilting. the variable was named wrongly
-    tic2.setTargetPosition(targetPitchSteps);
+    motorHorizontal.setTargetPosition(targetPitchSteps);
   }
 
-  delay(1);
+  delay(10);
 }
