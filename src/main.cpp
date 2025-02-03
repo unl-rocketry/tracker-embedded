@@ -4,39 +4,41 @@
 #include <SPI.h>
 #include <Adafruit_MMA8451.h>
 
-// Altitude and Azimuth
-TicI2C motorH(14);
-TicI2C motorV(15);
+// ##### TOP LEVEL STUFF ##### //
+// ########################### //
 
-Adafruit_MMA8451 mma = Adafruit_MMA8451();
-float x, y, z;
-double roll = 0.00, pitch = 0.00;
-double targetPitchSteps = 0.0;
-double targetAzimuth = 0.0;
-int stepsPerDegree = 126.0;
 
-unsigned long startTimeMS = 0;
-float startPitch = 0.0;
-const int RANGE = 100;
-
-// x: -263	y: 194	z: −142
-// x: -33   y: -24  z: -18
-
-const int OFFSET_X = 263;
-const int OFFSET_Y = -194;
-const int OFFSET_Z = 142;
-
+// #### PIN DEFINITIONS #### //
 const int SDA_PIN = 18;
 const int SCL_PIN = 19;
 
-void RP_calculate() {
-    mma.read();
-    x = float(mma.y - OFFSET_Y) / 4096;
-    y = float(mma.x - OFFSET_X) / 4096;
-    z = float(mma.z - OFFSET_Z) / 4096;
+// #### MOTOR DRIVERS #### //
+TicI2C motorHorizontal(14);
+TicI2C motorVertical(15);
 
-    roll = atan2(y , z) * 57.29577951;
-    pitch = (atan2(-x, pow(y, 2) + pow(z, 2) ) * 57.29577951);
+// Steps per degree for the motor drivers at the default stepping
+const int TIC_STEPS_PER_DEGREE = 126;
+const int TIC_DEFAULT_SPEED = 7000000;
+
+// #### ACCELEROMETER #### //
+Adafruit_MMA8451 mma8451 = Adafruit_MMA8451();
+
+// Offsets calculated manually from accelerometer data
+const int ACC_OFFSET_X =  263;
+const int ACC_OFFSET_Y = -194;
+const int ACC_OFFSET_Z =  142;
+
+// ##### END OF TOP LEVEL STUFF ##### //
+// ################################## //
+
+double calculatePitch() {
+    mma8451.read();
+    double x = double(mma8451.y - ACC_OFFSET_Y) / 4096;
+    double y = double(mma8451.x - ACC_OFFSET_X) / 4096;
+    double z = double(mma8451.z - ACC_OFFSET_Z) / 4096;
+
+    // Calculate pitch from acceleration data
+    return atan2(-x, pow(y, 2) + pow(z, 2) ) * 57.29577951;
 }
 
 void setupMotor(TicI2C motor) {
@@ -53,23 +55,22 @@ void setupMotor(TicI2C motor) {
 
 void calibrateVertical() {
     const float ZERO_CAL = 0.2;
-    int targetVelocity = 2000000;
+    int targetVelocity;
 
     // Find the zero position
     while (true) {
         double pitchSum = 0;
         for (int i = 0; i < 20; i++) {
-            RP_calculate();
+            double pitch = calculatePitch();
             pitchSum += pitch;
             delay(20);
         }
         pitchSum /= 20;
-        //Serial.println(pitchSum);
 
         // Prevents movement from erroring out
-        motorV.resetCommandTimeout();
+        motorVertical.resetCommandTimeout();
 
-        if (abs(pitchSum - ZERO_CAL) < 3.0) {
+        if (fabs(pitchSum - ZERO_CAL) < 3.0) {
             targetVelocity = 500000;
             delay(50);
         } else {
@@ -77,15 +78,15 @@ void calibrateVertical() {
         }
 
         if (pitchSum <= -0.02) {
-            motorV.setTargetVelocity(targetVelocity);
+            motorVertical.setTargetVelocity(targetVelocity);
         } else if (pitchSum >= 0.02) {
-            motorV.setTargetVelocity(-targetVelocity);
+            motorVertical.setTargetVelocity(-targetVelocity);
         } else {
-            motorV.haltAndSetPosition(0);
+            motorVertical.haltAndSetPosition(0);
             break;
         }
         delay(200);
-        motorV.setTargetVelocity(0);
+        motorVertical.setTargetVelocity(0);
     }
 }
 
@@ -100,18 +101,18 @@ void setup() {
     delay(100);
 
     Serial.println("Starting MMA8451");
-    if (!mma.begin()) {
+    if (!mma8451.begin()) {
         Serial.println("Failed to start MMA8451!");
     } else {
         Serial.println("MMA8451 found!");
     }
 
-    mma.setRange(MMA8451_RANGE_2_G);
-    mma.setDataRate(mma8451_dataRate_t::MMA8451_DATARATE_50_HZ);
+    mma8451.setRange(MMA8451_RANGE_2_G);
+    mma8451.setDataRate(mma8451_dataRate_t::MMA8451_DATARATE_50_HZ);
 
     // Set up motor driver(s)
-    setupMotor(motorV);
-    setupMotor(motorH);
+    setupMotor(motorVertical);
+    setupMotor(motorHorizontal);
 }
 
 void parseCommand(String input) {
@@ -157,8 +158,7 @@ void parseCommand(String input) {
             return;
         }
 
-        targetPitchSteps = position * float(stepsPerDegree);
-        motorV.setTargetPosition(targetPitchSteps);
+        motorVertical.setTargetPosition(position * float(TIC_STEPS_PER_DEGREE));
     } else if (command == "DHOR") {
         String arg1 = input.substring(indicies[0], indicies[1]);
         arg1.trim();
@@ -174,14 +174,13 @@ void parseCommand(String input) {
             return;
         }
 
-        targetPitchSteps = position * float(stepsPerDegree);
-        motorH.setTargetPosition(targetPitchSteps);
+        motorHorizontal.setTargetPosition(position * float(TIC_STEPS_PER_DEGREE));
     } else if (command == "CALV") {
         String arg1 = input.substring(indicies[0], indicies[1]);
         arg1.trim();
 
         if (arg1 == "SET") {
-            motorV.haltAndSetPosition(0);
+            motorVertical.haltAndSetPosition(0);
         } else if (indicies[1] == 0) {
             calibrateVertical();
         } else {
@@ -196,24 +195,26 @@ void parseCommand(String input) {
     Serial.println("OK");
 }
 
-String builtString = "";
-
+String commandString = "";
 void loop() {
     // Prevents movement from erroring out
-    motorH.resetCommandTimeout();
-    motorV.resetCommandTimeout();
+    motorHorizontal.resetCommandTimeout();
+    motorVertical.resetCommandTimeout();
 
     if (Serial.available() > 0) {
         // Read in a string until a newline, not including the newline
-        unsigned char byte = Serial.read();
+        signed char byte = Serial.read();
         if (byte == '\n') {
-            builtString += ' ';
-            parseCommand(builtString);
-            builtString.clear();
-        } else if (byte == 8) {
-            builtString.remove(builtString.length() - 1);
-        } else if (byte != 0xFF) {
-            builtString += byte;
+            // The command string has been terminated
+            commandString += ' ';
+            parseCommand(commandString);
+            commandString.clear();
+        } else if (byte == '\b' && commandString.length() != 0) {
+            // Backspace, delete the last character in the string.
+            commandString.remove(commandString.length() - 1);
+        } else if (byte != -1) {
+            // This is a regular valid character, add it to the string
+            commandString += byte;
         }
     }
 
