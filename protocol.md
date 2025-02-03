@@ -11,7 +11,7 @@ Horizontal axis is azimuth, vertical axis is altitude.
 
 Positive and negative must be specified.
 
-Commands respond with `OK\n` if successful, `ERR\n` if not. Some commands
+Commands respond with `OK\n` if successful, `ERR <REASON>\n` if not. Some commands
 respond with return arguments after the `OK` and before the `\n`.
 
 # Version 1.0.0
