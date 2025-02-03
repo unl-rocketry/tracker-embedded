@@ -17,8 +17,9 @@ TicI2C motorHorizontal(14);
 TicI2C motorVertical(15);
 
 // Steps per degree for the motor drivers at the default stepping
-const int TIC_STEPS_PER_DEGREE = 126;
-const int TIC_DEFAULT_SPEED = 7000000;
+const int TIC_STEPS_PER_DEGREE  = 126;
+const int TIC_SPEED_VERYSLOW    = 500000;
+const int TIC_SPEED_DEFAULT     = 7000000;
 
 // #### ACCELEROMETER #### //
 Adafruit_MMA8451 mma8451 = Adafruit_MMA8451();
@@ -53,43 +54,6 @@ void setupMotor(TicI2C motor) {
     motor.exitSafeStart();
 }
 
-void calibrateVertical() {
-    const float ZERO_CAL = 0.2;
-    int targetVelocity;
-
-    // Find the zero position
-    while (true) {
-        double pitchSum = 0;
-        for (int i = 0; i < 20; i++) {
-            double pitch = calculatePitch();
-            pitchSum += pitch;
-            delay(20);
-        }
-        pitchSum /= 20;
-
-        // Prevents movement from erroring out
-        motorVertical.resetCommandTimeout();
-
-        if (fabs(pitchSum - ZERO_CAL) < 3.0) {
-            targetVelocity = 500000;
-            delay(50);
-        } else {
-            targetVelocity = 7000000;
-        }
-
-        if (pitchSum <= -0.02) {
-            motorVertical.setTargetVelocity(targetVelocity);
-        } else if (pitchSum >= 0.02) {
-            motorVertical.setTargetVelocity(-targetVelocity);
-        } else {
-            motorVertical.haltAndSetPosition(0);
-            break;
-        }
-        delay(200);
-        motorVertical.setTargetVelocity(0);
-    }
-}
-
 void setup() {
     Serial.begin(115200);
     Serial.setTimeout(10);
@@ -113,6 +77,43 @@ void setup() {
     // Set up motor driver(s)
     setupMotor(motorVertical);
     setupMotor(motorHorizontal);
+}
+
+void calibrateVertical() {
+    const float ZERO_CAL = 0.2;
+    int targetVelocity;
+
+    // Find the zero position
+    while (true) {
+        double pitchSum = 0;
+        for (int i = 0; i < 20; i++) {
+            double pitch = calculatePitch();
+            pitchSum += pitch;
+            delay(20);
+        }
+        pitchSum /= 20;
+
+        // Prevents movement from erroring out
+        motorVertical.resetCommandTimeout();
+
+        if (fabs(pitchSum - ZERO_CAL) < 3.0) {
+            targetVelocity = TIC_SPEED_VERYSLOW;
+            delay(50);
+        } else {
+            targetVelocity = TIC_SPEED_DEFAULT;
+        }
+
+        if (pitchSum <= -0.02) {
+            motorVertical.setTargetVelocity(targetVelocity);
+        } else if (pitchSum >= 0.02) {
+            motorVertical.setTargetVelocity(-targetVelocity);
+        } else {
+            motorVertical.haltAndSetPosition(0);
+            break;
+        }
+        delay(200);
+        motorVertical.setTargetVelocity(0);
+    }
 }
 
 void parseCommand(String input) {
