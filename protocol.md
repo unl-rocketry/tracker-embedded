@@ -1,5 +1,6 @@
 # Protocol
-This is the protocol.
+This document describes the protocol for communication with the rotator being
+developed by the UNL Aerospace Rocketry Club.
 
 All commands are 4 characters long. All arguments are separated by spaces.
 Commands are terminated with a newline. The final argument of all commands must
