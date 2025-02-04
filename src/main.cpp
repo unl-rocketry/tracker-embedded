@@ -32,7 +32,7 @@ const int ACC_OFFSET_Z =  142;
 // ##### END OF TOP LEVEL STUFF ##### //
 // ################################## //
 
-double calculatePitch() {
+auto calculatePitch() -> double {
     mma8451.read();
     double x = double(mma8451.y - ACC_OFFSET_Y) / 4096;
     double y = double(mma8451.x - ACC_OFFSET_X) / 4096;
@@ -123,7 +123,7 @@ void calibrateVertical() {
     motorVertical.setMaxAccel(100000);
 }
 
-void parseCommand(String input) {
+void parseCommand(String &input) {
     if (input.length() == 1) {
         Serial.println("ERR");
     }
@@ -160,13 +160,13 @@ void parseCommand(String input) {
             return;
         }
 
-        int position = arg1.toFloat();
-        if (abs(position) > 90) {
+        double position = arg1.toFloat();
+        if (fabs(position) > 90) {
             Serial.println("ERR");
             return;
         }
 
-        motorVertical.setTargetPosition(position * float(TIC_STEPS_PER_DEGREE));
+        motorVertical.setTargetPosition((int32_t) (position * float(TIC_STEPS_PER_DEGREE)));
     } else if (command == "DHOR") {
         String arg1 = input.substring(indicies[0], indicies[1]);
         arg1.trim();
@@ -176,13 +176,13 @@ void parseCommand(String input) {
             return;
         }
 
-        int position = arg1.toFloat();
-        if (abs(position) > 180) {
+        double position = arg1.toFloat();
+        if (fabs(position) > 180) {
             Serial.println("ERR");
             return;
         }
 
-        motorHorizontal.setTargetPosition(position * float(TIC_STEPS_PER_DEGREE));
+        motorHorizontal.setTargetPosition((int32_t) (position * float(TIC_STEPS_PER_DEGREE)));
     } else if (command == "CALV") {
         String arg1 = input.substring(indicies[0], indicies[1]);
         arg1.trim();
@@ -207,8 +207,8 @@ void parseCommand(String input) {
             return;
         }
 
-        int position = arg1.toInt(); //TODO fix this to actually be correct for this part instead of being for the part it was coppied from
-        if (abs(position) > 90) {
+        long position = arg1.toInt(); //TODO fix this to actually be correct for this part instead of being for the part it was coppied from
+        if (labs(position) > 90) {
             Serial.println("ERR");
             return;
         }
@@ -224,8 +224,8 @@ void parseCommand(String input) {
             return;
         }
 
-        int position = arg1.toInt(); //TODO fix this to actually be correct for this part instead of being for the part it was coppied from
-        if (abs(position) > 90) {
+        int64_t position = arg1.toInt(); //TODO fix this to actually be correct for this part instead of being for the part it was coppied from
+        if (labs(position) > 90) {
             Serial.println("ERR");
             return;
         }
@@ -240,7 +240,7 @@ void parseCommand(String input) {
 
         Serial.println("Command List:");
         String command_list[] = {"DVER INT", "DHOR INT", "CALV {SET}", "CALH", "MOVV INT", "MOVH INT", "GETP", "SSPD INT {VER INT} {HOR INT} {RST}", "GSPD INT"};
-        for (String command : command_list) {
+        for (String &command : command_list) {
             Serial.print("  ");
             Serial.println(command);
         }
@@ -251,7 +251,7 @@ void parseCommand(String input) {
         arg1.trim();
         String arg2 = input.substring(indicies[1], indicies[2]);
         arg2.trim();
-        int new_speed = arg2.toInt();
+        int64_t new_speed = arg2.toInt();
 
         if (new_speed == -1) {
             Serial.println("ERR");
@@ -277,8 +277,8 @@ void parseCommand(String input) {
 
         // String arg1 = input.substring(indicies[0], indicies[1]);
         // arg1.trim();
-        int vertical_speed;
-        int Horizontal_speed;
+        uint32_t vertical_speed;
+        uint32_t Horizontal_speed;
 
         vertical_speed = motorVertical.getMaxSpeed();
         Horizontal_speed = motorHorizontal.getMaxSpeed();
@@ -314,7 +314,7 @@ void loop() {
 
     if (Serial.available() > 0) {
         // Read in a string until a newline, not including the newline
-        char byte = Serial.read();
+        int byte = Serial.read();
         if (byte == '\n') {
             // The command string has been terminated
             commandString += ' ';
@@ -326,7 +326,7 @@ void loop() {
             if (commandString.length() != 0) {
                 commandString.remove(commandString.length() - 1);
             }
-        } else if (byte != 0xFF) {
+        } else if (byte != 127) {
             // This is a regular valid character, add it to the string
             commandString += byte;
         }

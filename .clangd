@@ -1,0 +1,10 @@
+Diagnostics:
+  UnusedIncludes: Strict
+  ClangTidy:
+    Add: [bugprone-*, cert-*, modernize-*, performance-*, misc-unused-*]
+CompileFlags:
+  Add:
+    - '-Wall'
+    - '-Wextra'
+    - '-std=c++2a'
+
