@@ -211,7 +211,7 @@ void parseCommand(String &input) {
             return;
         }
 
-        int32_t steps_to_move = arg1.toInt();
+        auto steps_to_move = (int32_t) arg1.toInt();
         int32_t current_position = motorVertical.getCurrentPosition();
         int32_t move_to = current_position + steps_to_move;
         motorVertical.setTargetPosition(move_to);
@@ -225,14 +225,14 @@ void parseCommand(String &input) {
             return;
         }
 
-        int32_t steps_to_move = arg1.toInt();
+        auto steps_to_move = (int32_t) arg1.toInt();
         int32_t current_position = motorHorizontal.getCurrentPosition();
         int32_t move_to = current_position + steps_to_move;
         motorHorizontal.setTargetPosition(move_to);
 
     } else if (command == "GETP") {
-        float vertical_position = motorVertical.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE;
-        float horizontal_position = motorHorizontal.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE;
+        float vertical_position = (float) motorVertical.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE;
+        float horizontal_position = (float) motorHorizontal.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE;
 
         Serial.printf("OK %g %g\n",vertical_position, horizontal_position);
 
