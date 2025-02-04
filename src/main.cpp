@@ -320,9 +320,12 @@ void loop() {
             commandString += ' ';
             parseCommand(commandString);
             commandString.clear();
-        } else if (byte == '\b' && commandString.length() != 0) {
-            // Backspace, delete the last character in the string.
-            commandString.remove(commandString.length() - 1);
+        } else if (byte == '\b') {
+            // Backspace, delete the last character in the string. Unless it's empty
+            // then scream ig
+            if (commandString.length() != 0) {
+                commandString.remove(commandString.length() - 1);
+            }
         } else if (byte != 0xFF) {
             // This is a regular valid character, add it to the string
             commandString += byte;
