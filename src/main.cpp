@@ -155,7 +155,7 @@ void parseCommand(String &input) {
     if (command == "DVER") {
         String arg1 = input.substring(indicies[0], indicies[1]);
         arg1.trim();
-        if (arg1.isEmpty()) {
+        if (indexIndicies == 1) {
             Serial.println("ERR");
             return;
         }
@@ -167,11 +167,12 @@ void parseCommand(String &input) {
         }
 
         motorVertical.setTargetPosition((int32_t) (position * float(TIC_STEPS_PER_DEGREE)));
+
     } else if (command == "DHOR") {
         String arg1 = input.substring(indicies[0], indicies[1]);
         arg1.trim();
 
-        if (arg1.isEmpty()) {
+        if (indexIndicies == 1) {
             Serial.println("ERR");
             return;
         }
@@ -183,6 +184,7 @@ void parseCommand(String &input) {
         }
 
         motorHorizontal.setTargetPosition((int32_t) (position * float(TIC_STEPS_PER_DEGREE)));
+
     } else if (command == "CALV") {
         String arg1 = input.substring(indicies[0], indicies[1]);
         arg1.trim();
@@ -202,60 +204,57 @@ void parseCommand(String &input) {
     } else if (command == "MOVV") {
         String arg1 = input.substring(indicies[0], indicies[1]);
         arg1.trim();
-        if (indexIndicies != 2) {
+
+        if (indexIndicies == 1) {
             Serial.println("ERR");
             return;
         }
 
-        long position = arg1.toInt(); //TODO fix this to actually be correct for this part instead of being for the part it was coppied from
-        if (labs(position) > 90) {
-            Serial.println("ERR");
-            return;
-        }
-
-        //TODO add code to move verticaly relative to the current position
-
+        int32_t steps_to_move = arg1.toInt();
+        int32_t current_position = motorVertical.getCurrentPosition();
+        int32_t move_to = current_position + steps_to_move;
+        motorVertical.setTargetPosition(move_to);
 
     } else if (command == "MOVH") {
         String arg1 = input.substring(indicies[0], indicies[1]);
         arg1.trim();
-        if (indexIndicies != 2) {
+
+        if (indexIndicies == 1) {
             Serial.println("ERR");
             return;
         }
 
-        int64_t position = arg1.toInt(); //TODO fix this to actually be correct for this part instead of being for the part it was coppied from
-        if (labs(position) > 90) {
-            Serial.println("ERR");
-            return;
-        }
-
-        //TODO add code to move verticaly relative to the current position
+        int32_t steps_to_move = arg1.toInt();
+        int32_t current_position = motorHorizontal.getCurrentPosition();
+        int32_t move_to = current_position + steps_to_move;
+        motorHorizontal.setTargetPosition(move_to);
 
     } else if (command == "GETP") {
         float vertical_position = motorVertical.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE;
         float horizontal_position = motorHorizontal.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE;        
 
-        Serial.printf("OK %f %f\n",vertical_position, horizontal_position);
+        Serial.printf("OK %g %g\n",vertical_position, horizontal_position);
     
     } else if (command == "INFO") {
 
         Serial.println("Command List:");
-        String command_list[] = {"DVER INT", "DHOR INT", "CALV {SET}", "CALH", "MOVV INT", "MOVH INT", "GETP", "SSPD INT {VER INT} {HOR INT} {RST}", "GSPD INT"};
+        String command_list[] = {"DVER INT", "DHOR INT", "CALV {SET}", "CALH", "MOVV INT", "MOVH INT", "GETP", "SSPD INT {VER INT} {HOR INT} {RST}", "GSPD"};
         for (String &command : command_list) {
             Serial.print("  ");
             Serial.println(command);
         }
     
     } else if (command == "SSPD") {
-
         String arg1 = input.substring(indicies[0], indicies[1]);
         arg1.trim();
-        String arg2 = input.substring(indicies[1], indicies[2]);
-        arg2.trim();
-        int64_t new_speed = arg2.toInt();
 
-        if (new_speed == -1) {
+        int64_t new_speed;
+
+        if (indexIndicies == 3) {
+            String arg2 = input.substring(indicies[1], indicies[2]);
+            arg2.trim();
+            new_speed = arg2.toInt();
+        } else if (indexIndicies == 1 | ((arg1 == "VER" | arg1 == "HOR") && indexIndicies != 3)) {
             Serial.println("ERR");
             return;
         }
@@ -276,7 +275,6 @@ void parseCommand(String &input) {
         }
             
     } else if (command == "GSPD") {
-
         // String arg1 = input.substring(indicies[0], indicies[1]);
         // arg1.trim();
         uint32_t vertical_speed;
