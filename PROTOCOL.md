@@ -15,7 +15,7 @@ Positive and negative must be specified.
 Commands respond with `OK\n` if successful, `ERR <REASON>\n` if not. Some commands
 respond with return arguments after the `OK` and before the `\n`.
 
-# Version 1.0.0
+# Version 1.0.1
 
 ## Types
 command:    `ABCD` # 4 ASCII characters
@@ -74,9 +74,9 @@ Returns: `TBD`
 Description: Gets info!
 
 ### `SSPD`
-Args: `integer`
+Args: `integer, {VER integer}, {HOR integer}, {RST}`
 
-Description: Sets speed for both axes.
+Description: Sets speed for reqested axes. if no axis requested sets speed for both.
 
 ### `GSPD`
 Args:
