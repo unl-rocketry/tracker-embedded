@@ -1,8 +1,9 @@
-#include <Arduino.h>
+// #include <Arduino.h>
 #include <Wire.h>
 #include <Tic.h>
 #include <SPI.h>
 #include <Adafruit_MMA8451.h>
+#include "BluetoothSerial.h"
 
 // ##### TOP LEVEL STUFF ##### //
 // ########################### //
@@ -29,6 +30,12 @@ Adafruit_MMA8451 mma8451 = Adafruit_MMA8451();
 const int ACC_OFFSET_X =  263;
 const int ACC_OFFSET_Y = -194;
 const int ACC_OFFSET_Z =  142;
+
+BluetoothSerial SerialBT;
+//Stream *SerialOutput = &SerialBT;
+#define Serial SerialBT
+
+
 
 // ##### END OF TOP LEVEL STUFF ##### //
 // ################################## //
@@ -60,6 +67,8 @@ void setupMotor(TicI2C motor) {
 
 void setup() {
     Serial.begin(115200);
+    SerialBT.begin("ESP32test"); //Bluetooth device name
+
     Serial.setTimeout(10);
 
     while (!Serial) delay(10);
@@ -211,7 +220,7 @@ void parseCommand(String &input) {
             return;
         }
 
-        int32_t steps_to_move = arg1.toInt();
+        auto steps_to_move = (int32_t) arg1.toInt();
         int32_t current_position = motorVertical.getCurrentPosition();
         int32_t move_to = current_position + steps_to_move;
         motorVertical.setTargetPosition(move_to);
@@ -225,14 +234,14 @@ void parseCommand(String &input) {
             return;
         }
 
-        int32_t steps_to_move = arg1.toInt();
+        auto steps_to_move = (int32_t) arg1.toInt();
         int32_t current_position = motorHorizontal.getCurrentPosition();
         int32_t move_to = current_position + steps_to_move;
         motorHorizontal.setTargetPosition(move_to);
 
     } else if (command == "GETP") {
-        float vertical_position = motorVertical.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE;
-        float horizontal_position = motorHorizontal.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE;
+        float vertical_position = (float) motorVertical.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE;
+        float horizontal_position = (float) motorHorizontal.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE;
 
         Serial.printf("OK %g %g\n",vertical_position, horizontal_position);
 
@@ -258,7 +267,7 @@ void parseCommand(String &input) {
             if (new_speed > TIC_SPEED_MAX) {
                 new_speed = TIC_SPEED_MAX;
             }
-        } else if (indexIndicies == 1 | ((arg1 == "VER" | arg1 == "HOR") && indexIndicies != 3)) {
+        } else if (indexIndicies == 1 || ((arg1 == "VER" || arg1 == "HOR") && indexIndicies != 3)) {
             Serial.println("ERR");
             return;
         }
@@ -315,6 +324,7 @@ void loop() {
     // Prevents movement from erroring out
     motorHorizontal.resetCommandTimeout();
     motorVertical.resetCommandTimeout();
+
 
     if (Serial.available() > 0) {
         // Read in a string until a newline, not including the newline
