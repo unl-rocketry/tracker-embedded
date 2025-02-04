@@ -20,6 +20,7 @@ TicI2C motorVertical(15);
 const int TIC_STEPS_PER_DEGREE  = 126;
 const int TIC_SPEED_VERYSLOW    = 500000;
 const int TIC_SPEED_DEFAULT     = 7000000;
+const int TIC_SPEED_MAX         = 7000000;
 
 // #### ACCELEROMETER #### //
 Adafruit_MMA8451 mma8451 = Adafruit_MMA8451();
@@ -231,10 +232,10 @@ void parseCommand(String &input) {
 
     } else if (command == "GETP") {
         float vertical_position = motorVertical.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE;
-        float horizontal_position = motorHorizontal.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE;        
+        float horizontal_position = motorHorizontal.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE;
 
         Serial.printf("OK %g %g\n",vertical_position, horizontal_position);
-    
+
     } else if (command == "INFO") {
 
         Serial.println("Command List:");
@@ -243,7 +244,7 @@ void parseCommand(String &input) {
             Serial.print("  ");
             Serial.println(command);
         }
-    
+
     } else if (command == "SSPD") {
         String arg1 = input.substring(indicies[0], indicies[1]);
         arg1.trim();
@@ -254,6 +255,9 @@ void parseCommand(String &input) {
             String arg2 = input.substring(indicies[1], indicies[2]);
             arg2.trim();
             new_speed = arg2.toInt();
+            if (new_speed > TIC_SPEED_MAX) {
+                new_speed = TIC_SPEED_MAX
+            }
         } else if (indexIndicies == 1 | ((arg1 == "VER" | arg1 == "HOR") && indexIndicies != 3)) {
             Serial.println("ERR");
             return;
@@ -273,7 +277,7 @@ void parseCommand(String &input) {
             Serial.println("ERR");
             return;
         }
-            
+
     } else if (command == "GSPD") {
         // String arg1 = input.substring(indicies[0], indicies[1]);
         // arg1.trim();
@@ -286,7 +290,7 @@ void parseCommand(String &input) {
         // if (arg1 == "VER") {
         //     vertical_speed = motorVertical.getMaxSpeed();
         // } else if (arg1 == "HOR") {
-        //     Horizontal_speed = motorHorizontal.getMaxSpeed(); 
+        //     Horizontal_speed = motorHorizontal.getMaxSpeed();
         // } else if (indicies[1] == 0) {
         //     vertical_speed = motorVertical.getMaxSpeed();
         //     Horizontal_speed = motorHorizontal.getMaxSpeed();
@@ -294,10 +298,10 @@ void parseCommand(String &input) {
         //     Serial.println("ERR");
         //     return;
         // }
-        
+
         Serial.printf("OK %i %i\n",vertical_speed, Horizontal_speed);
         return;
-        
+
     } else {
         Serial.println("ERR");
         return;
