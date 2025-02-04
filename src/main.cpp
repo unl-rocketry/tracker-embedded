@@ -233,8 +233,10 @@ void parseCommand(String &input) {
         //TODO add code to move verticaly relative to the current position
 
     } else if (command == "GETP") {
-        
-        //TODO Get and return current position for verical and Horizontal position in format "float, float"
+        float vertical_position = motorVertical.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE;
+        float horizontal_position = motorHorizontal.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE;        
+
+        Serial.printf("OK %f %f\n",vertical_position, horizontal_position);
     
     } else if (command == "INFO") {
 
@@ -325,10 +327,11 @@ void loop() {
             // then scream ig
             if (commandString.length() != 0) {
                 commandString.remove(commandString.length() - 1);
+                Serial.print(" \b");
             }
-        } else if (byte != 127) {
+        } else if (byte != 0xFF) {
             // This is a regular valid character, add it to the string
-            commandString += byte;
+            commandString += (char) byte;
         }
     }
 
