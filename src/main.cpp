@@ -47,8 +47,11 @@ void setupMotor(TicI2C motor) {
     motor.setCurrentLimit(1024);
     motor.setAgcFrequencyLimit(TicAgcFrequencyLimit::F675Hz);
     motor.haltAndSetPosition(0);
-    // Default is 7,000,000
-    motor.setMaxSpeed(7000000);
+    Serial.println(motor.getMaxAccel());
+    motor.setMaxDecel(100000);
+    motor.setMaxAccel(100000);
+
+    motor.setMaxSpeed(TIC_SPEED_DEFAULT);
     motor.setStepMode(TicStepMode::Full);
 
     motor.exitSafeStart();
@@ -62,7 +65,7 @@ void setup() {
 
     Wire.begin(SDA_PIN, SCL_PIN);
 
-    delay(100);
+    delay(1000);
 
     Serial.println("Starting MMA8451");
     if (!mma8451.begin()) {
@@ -82,6 +85,8 @@ void setup() {
 void calibrateVertical() {
     const float ZERO_CAL = 0.2;
     int targetVelocity;
+    motorVertical.setMaxDecel(5000000);
+    motorVertical.setMaxAccel(5000000);
 
     // Find the zero position
     while (true) {
@@ -114,6 +119,8 @@ void calibrateVertical() {
         delay(200);
         motorVertical.setTargetVelocity(0);
     }
+    motorVertical.setMaxDecel(100000);
+    motorVertical.setMaxAccel(100000);
 }
 
 void parseCommand(String input) {
@@ -188,6 +195,109 @@ void parseCommand(String input) {
             Serial.println("ERR");
             return;
         }
+
+    } else if (command == "CALH") {
+        motorHorizontal.haltAndSetPosition(0);
+
+    } else if (command == "MOVV") {
+        String arg1 = input.substring(indicies[0], indicies[1]);
+        arg1.trim();
+        if (indexIndicies != 2) {
+            Serial.println("ERR");
+            return;
+        }
+
+        int position = arg1.toInt(); //TODO fix this to actually be correct for this part instead of being for the part it was coppied from
+        if (abs(position) > 90) {
+            Serial.println("ERR");
+            return;
+        }
+
+        //TODO add code to move verticaly relative to the current position
+
+
+    } else if (command == "MOVH") {
+        String arg1 = input.substring(indicies[0], indicies[1]);
+        arg1.trim();
+        if (indexIndicies != 2) {
+            Serial.println("ERR");
+            return;
+        }
+
+        int position = arg1.toInt(); //TODO fix this to actually be correct for this part instead of being for the part it was coppied from
+        if (abs(position) > 90) {
+            Serial.println("ERR");
+            return;
+        }
+
+        //TODO add code to move verticaly relative to the current position
+
+    } else if (command == "GETP") {
+        
+        //TODO Get and return current position for verical and Horizontal position in format "float, float"
+    
+    } else if (command == "INFO") {
+
+        Serial.println("Command List:");
+        String command_list[] = {"DVER INT", "DHOR INT", "CALV {SET}", "CALH", "MOVV INT", "MOVH INT", "GETP", "SSPD INT {VER INT} {HOR INT} {RST}", "GSPD INT"};
+        for (String command : command_list) {
+            Serial.print("  ");
+            Serial.println(command);
+        }
+    
+    } else if (command == "SSPD") {
+
+        String arg1 = input.substring(indicies[0], indicies[1]);
+        arg1.trim();
+        String arg2 = input.substring(indicies[1], indicies[2]);
+        arg2.trim();
+        int new_speed = arg2.toInt();
+
+        if (new_speed == -1) {
+            Serial.println("ERR");
+            return;
+        }
+
+        if (arg1 == "VER") {
+            motorVertical.setMaxSpeed(new_speed);
+        } else if (arg1 == "HOR") {
+            motorHorizontal.setMaxSpeed(new_speed);
+        } else if (arg1 == "RST") {
+            motorVertical.setMaxSpeed(TIC_SPEED_DEFAULT);
+            motorHorizontal.setMaxSpeed(TIC_SPEED_DEFAULT);
+        } else if (indicies[1] == 0) {
+            motorVertical.setMaxSpeed(new_speed);
+            motorHorizontal.setMaxSpeed(new_speed);
+        } else {
+            Serial.println("ERR");
+            return;
+        }
+            
+    } else if (command == "GSPD") {
+
+        // String arg1 = input.substring(indicies[0], indicies[1]);
+        // arg1.trim();
+        int vertical_speed;
+        int Horizontal_speed;
+
+        vertical_speed = motorVertical.getMaxSpeed();
+        Horizontal_speed = motorHorizontal.getMaxSpeed();
+
+        // if (arg1 == "VER") {
+        //     vertical_speed = motorVertical.getMaxSpeed();
+        // } else if (arg1 == "HOR") {
+        //     Horizontal_speed = motorHorizontal.getMaxSpeed(); 
+        // } else if (indicies[1] == 0) {
+        //     vertical_speed = motorVertical.getMaxSpeed();
+        //     Horizontal_speed = motorHorizontal.getMaxSpeed();
+        // } else {
+        //     Serial.println("ERR");
+        //     return;
+        // }
+        
+        Serial.printf("OK %i %i\n",vertical_speed, Horizontal_speed);
+        return;
+        
     } else {
         Serial.println("ERR");
         return;
@@ -204,7 +314,7 @@ void loop() {
 
     if (Serial.available() > 0) {
         // Read in a string until a newline, not including the newline
-        signed char byte = Serial.read();
+        char byte = Serial.read();
         if (byte == '\n') {
             // The command string has been terminated
             commandString += ' ';
@@ -213,7 +323,7 @@ void loop() {
         } else if (byte == '\b' && commandString.length() != 0) {
             // Backspace, delete the last character in the string.
             commandString.remove(commandString.length() - 1);
-        } else if (byte != -1) {
+        } else if (byte != 0xFF) {
             // This is a regular valid character, add it to the string
             commandString += byte;
         }
