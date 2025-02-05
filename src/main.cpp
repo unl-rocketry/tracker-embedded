@@ -258,7 +258,7 @@ void parseCommand(String &input) {
             if (new_speed > TIC_SPEED_MAX) {
                 new_speed = TIC_SPEED_MAX;
             }
-        } else if (indexIndicies == 1 | ((arg1 == "VER" | arg1 == "HOR") && indexIndicies != 3)) {
+        } else if (indexIndicies == 1 || ((arg1 == "VER" || arg1 == "HOR") && indexIndicies != 3)) {
             Serial.println("ERR");
             return;
         }
