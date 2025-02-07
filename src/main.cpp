@@ -16,10 +16,13 @@ TicI2C motorHorizontal(14);
 TicI2C motorVertical(15);
 
 // Steps per degree for the motor drivers at the default stepping
-const int TIC_STEPS_PER_DEGREE  = 126;
-const int TIC_SPEED_VERYSLOW    = 500000;
-const int TIC_SPEED_DEFAULT     = 7000000;
-const int TIC_SPEED_MAX         = 7000000;
+const int TIC_STEPS_PER_DEGREE_VERTICAL     = 126;
+const int TIC_STEPS_PER_DEGREE_HORIZONTAL   = 126;
+const int TIC_SPEED_VERYSLOW                = 500000;   //only used on CALV so no need to add a second one
+const int TIC_SPEED_DEFAULT_VERTICAL        = 7000000;
+const int TIC_SPEED_DEFAULT_HORIZONTAL      = 7000000;
+const int TIC_SPEED_MAX_VERTICAL            = 7000000;
+const int TIC_SPEED_MAX_HORIZONTAL          = 7000000;
 
 // #### ACCELEROMETER #### //
 Adafruit_MMA8451 mma8451 = Adafruit_MMA8451();
@@ -42,7 +45,7 @@ auto calculatePitch() -> double {
     return atan2(-x, pow(y, 2) + pow(z, 2) ) * 57.29577951;
 }
 
-void setupMotor(TicI2C motor) {
+void setupMotor(TicI2C motor, boolean whichMotor) {
     motor.setProduct(TicProduct::Tic36v4);
     motor.setCurrentLimit(1024);
     motor.setAgcFrequencyLimit(TicAgcFrequencyLimit::F675Hz);
@@ -50,8 +53,11 @@ void setupMotor(TicI2C motor) {
     Serial.println(motor.getMaxAccel());
     motor.setMaxDecel(100000);
     motor.setMaxAccel(100000);
-
-    motor.setMaxSpeed(TIC_SPEED_DEFAULT);
+    if (whichMotor) {
+        motor.setMaxSpeed(TIC_SPEED_DEFAULT_VERTICAL);
+    } else if (!whichMotor) {
+        motor.setMaxSpeed(TIC_SPEED_DEFAULT_HORIZONTAL);
+    }
     motor.setStepMode(TicStepMode::Full);
 
     motor.exitSafeStart();
@@ -78,8 +84,8 @@ void setup() {
     mma8451.setDataRate(mma8451_dataRate_t::MMA8451_DATARATE_50_HZ);
 
     // Set up motor driver(s)
-    setupMotor(motorVertical);
-    setupMotor(motorHorizontal);
+    setupMotor(motorVertical, true);
+    setupMotor(motorHorizontal, false);
 }
 
 void calibrateVertical() {
@@ -105,7 +111,7 @@ void calibrateVertical() {
             targetVelocity = TIC_SPEED_VERYSLOW;
             delay(50);
         } else {
-            targetVelocity = TIC_SPEED_DEFAULT;
+            targetVelocity = TIC_SPEED_DEFAULT_VERTICAL;
         }
 
         if (pitchSum <= -0.02) {
@@ -166,7 +172,7 @@ void parseCommand(String &input) {
             return;
         }
 
-        motorVertical.setTargetPosition((int32_t) (position * float(TIC_STEPS_PER_DEGREE)));
+        motorVertical.setTargetPosition((int32_t) (position * float(TIC_STEPS_PER_DEGREE_VERTICAL)));
 
     } else if (command == "DHOR") {
         String arg1 = input.substring(indicies[0], indicies[1]);
@@ -183,7 +189,7 @@ void parseCommand(String &input) {
             return;
         }
 
-        motorHorizontal.setTargetPosition((int32_t) (position * float(TIC_STEPS_PER_DEGREE)));
+        motorHorizontal.setTargetPosition((int32_t) (position * float(TIC_STEPS_PER_DEGREE_HORIZONTAL)));
 
     } else if (command == "CALV") {
         String arg1 = input.substring(indicies[0], indicies[1]);
@@ -230,8 +236,8 @@ void parseCommand(String &input) {
         motorHorizontal.setTargetPosition(move_to);
 
     } else if (command == "GETP") {
-        float vertical_position = (float) motorVertical.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE;
-        float horizontal_position = (float) motorHorizontal.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE;
+        float vertical_position = (float) motorVertical.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE_VERTICAL;
+        float horizontal_position = (float) motorHorizontal.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE_HORIZONTAL;
 
         Serial.printf("OK %g %g\n",vertical_position, horizontal_position);
 
@@ -254,21 +260,24 @@ void parseCommand(String &input) {
             String arg2 = input.substring(indicies[1], indicies[2]);
             arg2.trim();
             new_speed = arg2.toInt();
-            if (new_speed > TIC_SPEED_MAX) {
-                new_speed = TIC_SPEED_MAX;
-            }
         } else if (indexIndicies == 1 || ((arg1 == "VER" || arg1 == "HOR") && indexIndicies != 3)) {
             Serial.println("ERR");
             return;
         }
 
         if (arg1 == "VER") {
+            if (new_speed > TIC_SPEED_MAX_VERTICAL) {
+                new_speed = TIC_SPEED_MAX_VERTICAL;
+            }
             motorVertical.setMaxSpeed(new_speed);
         } else if (arg1 == "HOR") {
+            if (new_speed > TIC_SPEED_MAX_HORIZONTAL) {
+                new_speed = TIC_SPEED_MAX_HORIZONTAL;
+            }
             motorHorizontal.setMaxSpeed(new_speed);
         } else if (arg1 == "RST") {
-            motorVertical.setMaxSpeed(TIC_SPEED_DEFAULT);
-            motorHorizontal.setMaxSpeed(TIC_SPEED_DEFAULT);
+            motorVertical.setMaxSpeed(TIC_SPEED_DEFAULT_VERTICAL);
+            motorHorizontal.setMaxSpeed(TIC_SPEED_DEFAULT_HORIZONTAL);
         } else if (indicies[1] == 0) {
             motorVertical.setMaxSpeed(new_speed);
             motorHorizontal.setMaxSpeed(new_speed);
@@ -278,25 +287,11 @@ void parseCommand(String &input) {
         }
 
     } else if (command == "GSPD") {
-        // String arg1 = input.substring(indicies[0], indicies[1]);
-        // arg1.trim();
         uint32_t vertical_speed;
         uint32_t Horizontal_speed;
 
         vertical_speed = motorVertical.getMaxSpeed();
         Horizontal_speed = motorHorizontal.getMaxSpeed();
-
-        // if (arg1 == "VER") {
-        //     vertical_speed = motorVertical.getMaxSpeed();
-        // } else if (arg1 == "HOR") {
-        //     Horizontal_speed = motorHorizontal.getMaxSpeed();
-        // } else if (indicies[1] == 0) {
-        //     vertical_speed = motorVertical.getMaxSpeed();
-        //     Horizontal_speed = motorHorizontal.getMaxSpeed();
-        // } else {
-        //     Serial.println("ERR");
-        //     return;
-        // }
 
         Serial.printf("OK %i %i\n",vertical_speed, Horizontal_speed);
         return;
