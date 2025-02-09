@@ -131,12 +131,12 @@ void calibrateVertical() {
 }
 
 float getDeltaAngle(float curr_angle, float new_angle) {
-    float diff = fmod((new_angle - curr_angle + 180), (float) 360) - 180;
-    Serial.println(diff < -180 ? diff + 360 : diff);
-    if (diff < -180) {
-        return diff + 360;
+    // Calculate most optimal difference in current and destination angle
+    float diff = fmod((new_angle - curr_angle + 180), (float) 360) - 180; 
+    if (diff < -180) { 
+        return diff + 360; // if angle less than -180, switch direction 
     } else {
-        return diff;
+        return diff; 
     }
 }
 
@@ -200,8 +200,9 @@ void parseCommand(String &input) {
             return;
         }
 
+        // Get current position in steps
         float curr_pos = (float) motorHorizontal.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE_HORIZONTAL;
-        Serial.println(curr_pos);
+        
         while (curr_pos > 180) {
             curr_pos -= 360;
         }
@@ -209,7 +210,9 @@ void parseCommand(String &input) {
             curr_pos += 360;
         }
 
+        // Find the number of steps to get to destination
         int32_t angle_steps = (getDeltaAngle(curr_pos, position) * TIC_STEPS_PER_DEGREE_HORIZONTAL);
+        
         motorHorizontal.setTargetPosition(motorHorizontal.getCurrentPosition() + angle_steps);
 
     } else if (command == "CALV") {
