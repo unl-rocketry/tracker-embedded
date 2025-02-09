@@ -2,6 +2,7 @@
 #include <Tic.h>
 #include <SPI.h>
 #include <Adafruit_MMA8451.h>
+#include <cmath>
 
 // ##### TOP LEVEL STUFF ##### //
 // ########################### //
@@ -129,6 +130,16 @@ void calibrateVertical() {
     motorVertical.setMaxAccel(100000);
 }
 
+float getDeltaAngle(float curr_angle, float new_angle) {
+    float diff = fmod((new_angle - curr_angle + 180), (float) 360) - 180;
+    Serial.println(diff < -180 ? diff + 360 : diff);
+    if (diff < -180) {
+        return diff + 360;
+    } else {
+        return diff;
+    }
+}
+
 void parseCommand(String &input) {
     if (input.length() == 1) {
         Serial.println("ERR");
@@ -166,7 +177,7 @@ void parseCommand(String &input) {
             return;
         }
 
-        double position = arg1.toFloat();
+        float position = arg1.toFloat();
         if (fabs(position) > 90) {
             Serial.println("ERR");
             return;
@@ -183,13 +194,23 @@ void parseCommand(String &input) {
             return;
         }
 
-        double position = arg1.toFloat();
+        float position = arg1.toFloat();
         if (fabs(position) > 180) {
             Serial.println("ERR");
             return;
         }
 
-        motorHorizontal.setTargetPosition((int32_t) (position * float(TIC_STEPS_PER_DEGREE_HORIZONTAL)));
+        float curr_pos = (float) motorHorizontal.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE_HORIZONTAL;
+        Serial.println(curr_pos);
+        while (curr_pos > 180) {
+            curr_pos -= 360;
+        }
+        while (curr_pos < -180) {
+            curr_pos += 360;
+        }
+
+        int32_t angle_steps = (getDeltaAngle(curr_pos, position) * TIC_STEPS_PER_DEGREE_HORIZONTAL);
+        motorHorizontal.setTargetPosition(motorHorizontal.getCurrentPosition() + angle_steps);
 
     } else if (command == "CALV") {
         String arg1 = input.substring(indicies[0], indicies[1]);
