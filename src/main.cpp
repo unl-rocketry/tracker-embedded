@@ -238,7 +238,12 @@ void parseCommand(String &input) {
     } else if (command == "GETP") {
         float vertical_position = (float) motorVertical.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE_VERTICAL;
         float horizontal_position = (float) motorHorizontal.getCurrentPosition() / (float) TIC_STEPS_PER_DEGREE_HORIZONTAL;
-
+        while (horizontal_position > 180) {
+            horizontal_position -= 360;
+        }
+        while (horizontal_position < -180) {
+            horizontal_position += 360;
+        }
         Serial.printf("OK %g %g\n",vertical_position, horizontal_position);
 
     } else if (command == "INFO") {
