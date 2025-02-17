@@ -15,7 +15,7 @@ Positive and negative must be specified.
 Commands respond with `OK\n` if successful, `ERR <REASON>\n` if not. Some commands
 respond with return arguments after the `OK` and before the `\n`.
 
-# Version 1.1.0
+# Version 1.1.1
 
 ## Types
 command:    `ABCD` # 4 ASCII characters
@@ -24,7 +24,7 @@ string arg: `ABC`  # 3 ASCII characters
 
 float:      `1234.567` or `-1234.567` # Signed floating point, unlimited number of leading and trailing digits
 
-integer:    `1234` or `-1234` # 7 digit raw integer, unlimited number of digits
+integer:    `1234` or `-1234` # Signed integer unlimited number of digits
 
 
 ## Commands
