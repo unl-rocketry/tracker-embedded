@@ -17,13 +17,15 @@ TicI2C motorHorizontal(14);
 TicI2C motorVertical(15);
 
 // Steps per degree for the motor drivers at the default stepping
-const int TIC_STEPS_PER_DEGREE_VERTICAL     = 126;
+const int TIC_STEPS_PER_DEGREE_VERTICAL     = 24;
 const int TIC_STEPS_PER_DEGREE_HORIZONTAL   = 126;
 const int TIC_SPEED_VERYSLOW                = 500000;   //only used on CALV so no need to add a second one
 const int TIC_SPEED_DEFAULT_VERTICAL        = 7000000;
 const int TIC_SPEED_DEFAULT_HORIZONTAL      = 7000000;
 const int TIC_SPEED_MAX_VERTICAL            = 7000000;
 const int TIC_SPEED_MAX_HORIZONTAL          = 7000000;
+
+const int TIC_DECEL_DEFAULT = 2000000;
 
 // #### ACCELEROMETER #### //
 Adafruit_MMA8451 mma8451 = Adafruit_MMA8451();
@@ -48,12 +50,12 @@ auto calculatePitch() -> double {
 
 void setupMotor(TicI2C motor, boolean whichMotor) {
     motor.setProduct(TicProduct::Tic36v4);
-    motor.setCurrentLimit(1024);
+    motor.setCurrentLimit(2000);
     motor.setAgcFrequencyLimit(TicAgcFrequencyLimit::F675Hz);
     motor.haltAndSetPosition(0);
     Serial.println(motor.getMaxAccel());
-    motor.setMaxDecel(100000);
-    motor.setMaxAccel(100000);
+    motor.setMaxDecel(TIC_DECEL_DEFAULT);
+    motor.setMaxAccel(TIC_DECEL_DEFAULT);
     if (whichMotor) {
         motor.setMaxSpeed(TIC_SPEED_DEFAULT_VERTICAL);
     } else if (!whichMotor) {
@@ -94,6 +96,7 @@ void calibrateVertical() {
     int targetVelocity;
     motorVertical.setMaxDecel(5000000);
     motorVertical.setMaxAccel(5000000);
+    motorVertical.setStepMode(TicStepMode::Microstep8);
 
     // Find the zero position
     while (true) {
@@ -109,10 +112,10 @@ void calibrateVertical() {
         motorVertical.resetCommandTimeout();
 
         if (fabs(pitchSum - ZERO_CAL) < 3.0) {
-            targetVelocity = TIC_SPEED_VERYSLOW;
+            targetVelocity = -TIC_SPEED_VERYSLOW;
             delay(50);
         } else {
-            targetVelocity = TIC_SPEED_DEFAULT_VERTICAL;
+            targetVelocity = -TIC_SPEED_DEFAULT_VERTICAL;
         }
 
         if (pitchSum <= -0.02) {
@@ -126,8 +129,9 @@ void calibrateVertical() {
         delay(200);
         motorVertical.setTargetVelocity(0);
     }
-    motorVertical.setMaxDecel(100000);
-    motorVertical.setMaxAccel(100000);
+    motorVertical.setMaxDecel(TIC_DECEL_DEFAULT);
+    motorVertical.setMaxAccel(TIC_DECEL_DEFAULT);
+    motorVertical.setStepMode(TicStepMode::Full);
 }
 
 float getDeltaAngle(float curr_angle, float new_angle) {
@@ -359,6 +363,8 @@ void loop() {
             commandString += (char) byte;
         }
     }
+
+    //Serial.printf("%i\n", motorVertical.getCurrentPosition());
 
     delay(10);
 }
