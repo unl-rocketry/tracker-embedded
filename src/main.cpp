@@ -48,7 +48,7 @@ auto calculatePitch() -> double {
     return atan2(-x, pow(y, 2) + pow(z, 2) ) * 57.29577951;
 }
 
-void setupMotor(TicI2C motor, boolean whichMotor) {
+void setupMotor(TicI2C motor, String whichMotor) {
     motor.setProduct(TicProduct::Tic36v4);
     motor.setCurrentLimit(2000);
     motor.setAgcFrequencyLimit(TicAgcFrequencyLimit::F675Hz);
@@ -56,11 +56,12 @@ void setupMotor(TicI2C motor, boolean whichMotor) {
     Serial.println(motor.getMaxAccel());
     motor.setMaxDecel(TIC_DECEL_DEFAULT);
     motor.setMaxAccel(TIC_DECEL_DEFAULT);
-    if (whichMotor) {
+    if (whichMotor == "Vert") {
         motor.setMaxSpeed(TIC_SPEED_DEFAULT_VERTICAL);
-    } else if (!whichMotor) {
+    } else if (whichMotor == "Horiz") {
         motor.setMaxSpeed(TIC_SPEED_DEFAULT_HORIZONTAL);
-    }
+    } else
+        motor.setMaxSpeed(min(TIC_SPEED_DEFAULT_VERTICAL, TIC_SPEED_DEFAULT_HORIZONTAL));
     motor.setStepMode(TicStepMode::Full);
 
     motor.exitSafeStart();
@@ -87,8 +88,8 @@ void setup() {
     mma8451.setDataRate(mma8451_dataRate_t::MMA8451_DATARATE_50_HZ);
 
     // Set up motor driver(s)
-    setupMotor(motorVertical, true);
-    setupMotor(motorHorizontal, false);
+    setupMotor(motorVertical, "Vert");
+    setupMotor(motorHorizontal, "Horiz");
 }
 
 void calibrateVertical() {
