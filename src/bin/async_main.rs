@@ -32,14 +32,10 @@ async fn main(spawner: Spawner) {
 
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
-
     esp_alloc::heap_allocator!(72 * 1024);
-
     esp_println::logger::init_logger_from_env();
-
     let timer0 = esp_hal::timer::timg::TimerGroup::new(peripherals.TIMG1);
     esp_hal_embassy::init(timer0.timer0);
-
     info!("Embassy initialized!");
 
     let sda = peripherals.GPIO18;
@@ -55,12 +51,10 @@ async fn main(spawner: Spawner) {
     .with_sda(sda)
     .with_scl(scl)
     .into_async();
-
     let i2c_bus = RefCell::new(i2c_bus);
 
     let mut motor_horizontal =
         pololu_tic::TicI2C::new_with_address(RefCellDevice::new(&i2c_bus), TicProduct::Tic36v4, 14);
-
     let mut motor_vertical =
         pololu_tic::TicI2C::new_with_address(RefCellDevice::new(&i2c_bus), TicProduct::Tic36v4, 15);
 
@@ -74,7 +68,6 @@ async fn main(spawner: Spawner) {
         Ok(()) => (),
         Err(e) => error!("Motor setup error: {:?}", e),
     }
-
     info!("Motors Set Up!!");
 
     loop {
@@ -165,4 +158,14 @@ async fn calibrate_vertical<I: embedded_hal::i2c::I2c>(motor: &mut TicI2C<I>) {
     motor.set_max_decel(TIC_DECEL_DEFAULT).unwrap();
     motor.set_max_accel(TIC_DECEL_DEFAULT).unwrap();
     motor.set_step_mode(TicStepMode::Full).unwrap();
+}
+
+/// Calculate most optimal difference in current and destination angle
+fn get_delta_angle(curr_angle: f32, new_angle: f32) -> f32 {
+    let diff: f32 = ((new_angle - curr_angle + 180.0)%360.0) - 180.0;
+    if diff < -180.0 {
+        diff + 360.0 //if angle less than -180 switch directions
+    } else {
+        diff
+    }
 }
