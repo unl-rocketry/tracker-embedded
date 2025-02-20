@@ -12,6 +12,7 @@ use log::{error, info};
 
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
+use mma8x5x::Mma8x5x;
 use pololu_tic::{base::TicBase, TicHandlerError, TicI2C, TicProduct, TicStepMode};
 
 extern crate alloc;
@@ -58,6 +59,9 @@ async fn main(spawner: Spawner) {
     let mut motor_vertical =
         pololu_tic::TicI2C::new_with_address(RefCellDevice::new(&i2c_bus), TicProduct::Tic36v4, 15);
 
+    let accelerometer = Mma8x5x::new_mma8451(RefCellDevice::new(&i2c_bus), mma8x5x::SlaveAddr::Default);
+    let mut accelerometer = accelerometer.into_active().ok().unwrap();
+
     Timer::after(Duration::from_secs(1)).await;
 
     match setup_motor(&mut motor_horizontal, MotorAxis::Horizontal) {
@@ -89,8 +93,15 @@ enum MotorAxis {
 }
 
 /// Calculates pitch from MMA8451 data
-fn calculate_pitch() -> f64 {
-    todo!()
+fn calculate_pitch<I: embedded_hal::i2c::I2c>(
+    accel: &mut Mma8x5x<I, mma8x5x::ic::Mma8451, mma8x5x::mode::Active>,
+) -> f32 {
+    let data = accel.read().unwrap();
+    let x = data.y;
+    let y = data.x;
+    let z = data.z;
+
+    libm::atan2f(-x, libm::powf(y, 2.0) + libm::powf(z, 2.0)) * 57.29577951
 }
 
 /// Function to set up motors

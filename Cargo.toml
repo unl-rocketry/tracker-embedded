@@ -26,6 +26,8 @@ pololu_tic = { git = "https://github.com/unl-rocketry/pololu_tic-rs.git" }
 log = "0.4.25"
 embedded-hal-bus = "0.3.0"
 embedded-hal = "1.0.0"
+mma8x5x = { path = "/home/g2/Downloads/mma8x5x-rs-master/" }
+libm = "0.2.11"
 
 [profile.dev]
 # Rust debug is too slow.
