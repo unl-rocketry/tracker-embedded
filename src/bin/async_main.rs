@@ -12,7 +12,7 @@ use log::{error, info};
 
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
-use mma8x5x::Mma8x5x;
+use mma8x5x::{ic::Mma8451, mode, Mma8x5x};
 use pololu_tic::{base::TicBase, TicHandlerError, TicI2C, TicProduct, TicStepMode};
 
 extern crate alloc;
@@ -59,7 +59,9 @@ async fn main(spawner: Spawner) {
     let mut motor_vertical =
         pololu_tic::TicI2C::new_with_address(RefCellDevice::new(&i2c_bus), TicProduct::Tic36v4, 15);
 
-    let accelerometer = Mma8x5x::new_mma8451(RefCellDevice::new(&i2c_bus), mma8x5x::SlaveAddr::Default);
+    let mut accelerometer = Mma8x5x::new_mma8451(RefCellDevice::new(&i2c_bus), mma8x5x::SlaveAddr::Alternative(true));
+    let _ = accelerometer.disable_auto_sleep();
+    let _ = accelerometer.set_scale(mma8x5x::GScale::G2);
     let mut accelerometer = accelerometer.into_active().ok().unwrap();
 
     Timer::after(Duration::from_secs(1)).await;
@@ -83,6 +85,10 @@ async fn main(spawner: Spawner) {
         motor_vertical
             .reset_command_timeout()
             .expect("Motor vertical communication failure");
+
+
+        let pitch = calculate_pitch(&mut accelerometer);
+        info!("Pitch: {}", pitch);
     }
 }
 
@@ -94,7 +100,7 @@ enum MotorAxis {
 
 /// Calculates pitch from MMA8451 data
 fn calculate_pitch<I: embedded_hal::i2c::I2c>(
-    accel: &mut Mma8x5x<I, mma8x5x::ic::Mma8451, mma8x5x::mode::Active>,
+    accel: &mut Mma8x5x<I, Mma8451, mode::Active>,
 ) -> f32 {
     let data = accel.read().unwrap();
     let x = data.y;
@@ -126,7 +132,10 @@ fn setup_motor<I: embedded_hal::i2c::I2c>(
     Ok(())
 }
 
-async fn calibrate_vertical<I: embedded_hal::i2c::I2c>(motor: &mut TicI2C<I>) {
+async fn calibrate_vertical<I: embedded_hal::i2c::I2c>(
+    motor: &mut TicI2C<I>,
+    accel: &mut Mma8x5x<I, Mma8451, mode::Active>,
+) {
     const ZERO_CAL: f64 = 0.2;
     let mut target_velocity: i32;
     motor.set_max_decel(5000000).unwrap();
@@ -137,7 +146,7 @@ async fn calibrate_vertical<I: embedded_hal::i2c::I2c>(motor: &mut TicI2C<I>) {
     loop {
         let mut pitch_sum: f64 = 0.0;
         for _i in 0..20 {
-            let pitch: f64 = calculate_pitch();
+            let pitch: f64 = calculate_pitch(accel) as f64;
             pitch_sum += pitch;
             Timer::after(Duration::from_millis(20)).await;
         }
