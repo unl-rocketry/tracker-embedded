@@ -2,18 +2,29 @@
 #![no_std]
 
 use core::cell::RefCell;
-use alloc::string::String;
-
 use embedded_hal_bus::i2c::RefCellDevice;
 use esp_backtrace as _;
-use esp_hal::{clock::CpuClock, i2c::{self, master::I2c}};
-use log::info;
+use esp_hal::{
+    clock::CpuClock,
+    i2c::{self, master::I2c},
+};
+use log::{error, info};
 
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
-use pololu_tic::{base::TicBase, TicI2C, TicProduct, TicStepMode};
+use pololu_tic::{base::TicBase, TicHandlerError, TicI2C, TicProduct, TicStepMode};
 
 extern crate alloc;
+
+const STEPS_PER_DEGREE_VERTICAL: u32 = 24;
+const STEPS_PER_DEGREE_HORIZONTAL: u32 = 126;
+const SPEED_VERYSLOW: i32 = 500000; //only used on CALV so no need to add a second one
+const SPEED_DEFAULT_VERTICAL: i32 = 7000000;
+const SPEED_DEFAULT_HORIZONTAL: i32 = 7000000;
+const SPEED_MAX_VERTICAL: u32 = 7000000;
+const SPEED_MAX_HORIZONTAL: u32 = 7000000;
+
+const TIC_DECEL_DEFAULT: u32 = 2000000;
 
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
@@ -38,8 +49,7 @@ async fn main(spawner: Spawner) {
 
     let i2c_bus = I2c::new(
         peripherals.I2C0,
-        esp_hal::i2c::master::Config::default()
-            .with_timeout(i2c::master::BusTimeout::Maximum)
+        esp_hal::i2c::master::Config::default().with_timeout(i2c::master::BusTimeout::Maximum),
     )
     .unwrap()
     .with_sda(sda)
@@ -48,38 +58,111 @@ async fn main(spawner: Spawner) {
 
     let i2c_bus = RefCell::new(i2c_bus);
 
-    let mut motor_horizontal = pololu_tic::TicI2C::new_with_address(
-        RefCellDevice::new(&i2c_bus),
-        TicProduct::Tic36v4,
-        14,
-    );
+    let mut motor_horizontal =
+        pololu_tic::TicI2C::new_with_address(RefCellDevice::new(&i2c_bus), TicProduct::Tic36v4, 14);
 
-    let mut motor_vertical = pololu_tic::TicI2C::new_with_address(
-        RefCellDevice::new(&i2c_bus),
-        TicProduct::Tic36v4,
-        15,
-    );
+    let mut motor_vertical =
+        pololu_tic::TicI2C::new_with_address(RefCellDevice::new(&i2c_bus), TicProduct::Tic36v4, 15);
 
     Timer::after(Duration::from_secs(1)).await;
 
-    setup_motor(&mut motor_horizontal);
+    match setup_motor(&mut motor_horizontal, MotorAxis::Horizontal) {
+        Ok(()) => (),
+        Err(e) => error!("Motor setup error: {:?}", e),
+    }
+    match setup_motor(&mut motor_vertical, MotorAxis::Vertical) {
+        Ok(()) => (),
+        Err(e) => error!("Motor setup error: {:?}", e),
+    }
 
-    motor_horizontal.set_target_velocity(7000000);
+    info!("Motors Set Up!!");
 
     loop {
         Timer::after(Duration::from_millis(100)).await;
-        motor_horizontal.reset_command_timeout();
-        info!("{}", motor_horizontal.current_position());
+
+        motor_horizontal
+            .reset_command_timeout()
+            .expect("Motor horizontal communication failure");
+        motor_vertical
+            .reset_command_timeout()
+            .expect("Motor vertical communication failure");
     }
 }
 
-fn setup_motor<I: embedded_hal::i2c::I2c>(motor: &mut TicI2C<I>) {
-    motor.set_current_limit(2000);
-    motor.halt_and_set_position(0);
-    motor.set_max_decel(7000000);
-    motor.set_max_accel(7000000);
-    motor.set_max_speed(7000000);
-    motor.set_starting_speed(7000000);
-    motor.set_step_mode(TicStepMode::Full);
-    motor.exit_safe_start();
+#[derive(PartialEq, Eq)]
+enum MotorAxis {
+    Horizontal,
+    Vertical,
+}
+
+/// Calculates pitch from MMA8451 data
+fn calculate_pitch() -> f64 {
+    todo!()
+}
+
+/// Function to set up motors
+fn setup_motor<I: embedded_hal::i2c::I2c>(
+    motor: &mut TicI2C<I>,
+    motor_axis: MotorAxis,
+) -> Result<(), TicHandlerError> {
+    motor.set_current_limit(2000)?;
+    motor.halt_and_set_position(0)?;
+    motor.set_max_decel(TIC_DECEL_DEFAULT)?;
+    motor.set_max_accel(TIC_DECEL_DEFAULT)?;
+
+    match motor_axis {
+        MotorAxis::Vertical => motor.set_max_speed(SPEED_MAX_VERTICAL)?,
+        MotorAxis::Horizontal => motor.set_max_speed(SPEED_MAX_HORIZONTAL)?,
+    }
+
+    motor.set_step_mode(TicStepMode::Full)?;
+
+    motor.exit_safe_start()?;
+
+    Ok(())
+}
+
+async fn calibrate_vertical<I: embedded_hal::i2c::I2c>(motor: &mut TicI2C<I>) {
+    const ZERO_CAL: f64 = 0.2;
+    let mut target_velocity: i32;
+    motor.set_max_decel(5000000).unwrap();
+    motor.set_max_accel(5000000).unwrap();
+    motor.set_step_mode(TicStepMode::Microstep8).unwrap();
+
+    //find zero
+    loop {
+        let mut pitch_sum: f64 = 0.0;
+        for _i in 0..20 {
+            let pitch: f64 = calculate_pitch();
+            pitch_sum += pitch;
+            Timer::after(Duration::from_millis(20)).await;
+        }
+        pitch_sum /= 20.0;
+
+        // Prevents movement from erroring out
+        motor
+            .reset_command_timeout()
+            .expect("Motor horizontal communication failure");
+
+        if f64::abs(pitch_sum - ZERO_CAL) < 3.0 {
+            target_velocity = -SPEED_VERYSLOW;
+            Timer::after(Duration::from_millis(50)).await;
+        } else {
+            target_velocity = -SPEED_DEFAULT_VERTICAL;
+        }
+
+        if pitch_sum <= -0.02 {
+            motor.set_target_velocity(target_velocity).unwrap();
+        } else if pitch_sum >= 0.02 {
+            motor.set_target_velocity(-target_velocity).unwrap();
+        } else {
+            motor.halt_and_set_position(0).unwrap();
+            break;
+        }
+        Timer::after(Duration::from_millis(200)).await;
+        motor.set_target_position(0).unwrap();
+    }
+    motor.set_max_decel(TIC_DECEL_DEFAULT).unwrap();
+    motor.set_max_accel(TIC_DECEL_DEFAULT).unwrap();
+    motor.set_step_mode(TicStepMode::Full).unwrap();
 }
