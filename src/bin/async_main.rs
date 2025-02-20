@@ -8,24 +8,30 @@ use esp_hal::{
     clock::CpuClock,
     i2c::{self, master::I2c},
 };
-use log::{error, info};
+use esp_println::print;
 
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
-use mma8x5x::{ic::Mma8451, mode, Mma8x5x};
+use log::info;
+use mma8x5x::{ic::Mma8451, mode, GScale, Mma8x5x, OutputDataRate, PowerMode};
 use pololu_tic::{base::TicBase, TicHandlerError, TicI2C, TicProduct, TicStepMode};
 
 extern crate alloc;
 
 const STEPS_PER_DEGREE_VERTICAL: u32 = 24;
 const STEPS_PER_DEGREE_HORIZONTAL: u32 = 126;
-const SPEED_VERYSLOW: i32 = 500000; //only used on CALV so no need to add a second one
+const SPEED_VERYSLOW: i32 = 200000; //only used on CALV so no need to add a second one
 const SPEED_DEFAULT_VERTICAL: i32 = 7000000;
 const SPEED_DEFAULT_HORIZONTAL: i32 = 7000000;
 const SPEED_MAX_VERTICAL: u32 = 7000000;
 const SPEED_MAX_HORIZONTAL: u32 = 7000000;
 
 const TIC_DECEL_DEFAULT: u32 = 2000000;
+
+// Offsets calculated manually from accelerometer data
+const ACC_OFFSET_X: i16 =  53 / 8;
+const ACC_OFFSET_Y: i16 =  83 / 8;
+const ACC_OFFSET_Z: i16 = -154 / 8;
 
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
@@ -59,25 +65,45 @@ async fn main(spawner: Spawner) {
     let mut motor_vertical =
         pololu_tic::TicI2C::new_with_address(RefCellDevice::new(&i2c_bus), TicProduct::Tic36v4, 15);
 
-    let mut accelerometer = Mma8x5x::new_mma8451(RefCellDevice::new(&i2c_bus), mma8x5x::SlaveAddr::Alternative(true));
+    let mut accelerometer = Mma8x5x::new_mma8451(
+        RefCellDevice::new(&i2c_bus),
+        mma8x5x::SlaveAddr::Alternative(true),
+    );
     let _ = accelerometer.disable_auto_sleep();
-    let _ = accelerometer.set_scale(mma8x5x::GScale::G2);
-    let mut accelerometer = accelerometer.into_active().ok().unwrap();
+    let _ = accelerometer.set_scale(GScale::G2);
+    let _ = accelerometer.set_data_rate(OutputDataRate::Hz50);
+    let _ = accelerometer.set_wake_power_mode(PowerMode::HighResolution);
+    let _ = accelerometer.set_read_mode(mma8x5x::ReadMode::Normal);
+    let _ = accelerometer.set_offset_correction(
+        ACC_OFFSET_X as i8,
+        ACC_OFFSET_Y as i8,
+        ACC_OFFSET_Z as i8
+    );
+
+    let (tx_pin, rx_pin) = (peripherals.GPIO1, peripherals.GPIO3);
+    let config = esp_hal::uart::Config::default()
+        .with_rx_fifo_full_threshold(64);
+
+    let mut uart0 = esp_hal::uart::Uart::new(peripherals.UART0, config)
+        .unwrap()
+        .with_tx(tx_pin)
+        .with_rx(rx_pin)
+        .into_async();
+
+    uart0.set_at_cmd(esp_hal::uart::AtCmdConfig::default().with_cmd_char(0x04));
 
     Timer::after(Duration::from_secs(1)).await;
 
-    match setup_motor(&mut motor_horizontal, MotorAxis::Horizontal) {
-        Ok(()) => (),
-        Err(e) => error!("Motor setup error: {:?}", e),
-    }
-    match setup_motor(&mut motor_vertical, MotorAxis::Vertical) {
-        Ok(()) => (),
-        Err(e) => error!("Motor setup error: {:?}", e),
-    }
-    info!("Motors Set Up!!");
+    let mut accelerometer = accelerometer.into_active().ok().expect("Accelerometer could not be found!");
+    info!("MMA8451 set up!!");
 
+    setup_motor(&mut motor_horizontal, MotorAxis::Horizontal).expect("Horizontal motor setup error");
+    setup_motor(&mut motor_vertical, MotorAxis::Vertical).expect("Vertical motor setup error");
+    info!("Motors set up!!");
+
+    let mut buffer = [0; 64];
     loop {
-        Timer::after(Duration::from_millis(100)).await;
+        Timer::after(Duration::from_millis(10)).await;
 
         motor_horizontal
             .reset_command_timeout()
@@ -86,9 +112,10 @@ async fn main(spawner: Spawner) {
             .reset_command_timeout()
             .expect("Motor vertical communication failure");
 
+        uart0.read_buffered_bytes(&mut buffer).unwrap();
+        print!("{:?}", buffer);
 
-        let pitch = calculate_pitch(&mut accelerometer);
-        info!("Pitch: {}", pitch);
+        buffer = [0; 64];
     }
 }
 
@@ -144,6 +171,7 @@ async fn calibrate_vertical<I: embedded_hal::i2c::I2c>(
 
     //find zero
     loop {
+        Timer::after(Duration::from_millis(100)).await;
         let mut pitch_sum: f64 = 0.0;
         for _i in 0..20 {
             let pitch: f64 = calculate_pitch(accel) as f64;
@@ -152,12 +180,14 @@ async fn calibrate_vertical<I: embedded_hal::i2c::I2c>(
         }
         pitch_sum /= 20.0;
 
+        info!("{pitch_sum}");
+
         // Prevents movement from erroring out
         motor
             .reset_command_timeout()
             .expect("Motor horizontal communication failure");
 
-        if f64::abs(pitch_sum - ZERO_CAL) < 3.0 {
+        if f64::abs(pitch_sum - ZERO_CAL) < 1.0 {
             target_velocity = -SPEED_VERYSLOW;
             Timer::after(Duration::from_millis(50)).await;
         } else {
@@ -173,7 +203,7 @@ async fn calibrate_vertical<I: embedded_hal::i2c::I2c>(
             break;
         }
         Timer::after(Duration::from_millis(200)).await;
-        motor.set_target_position(0).unwrap();
+        motor.set_target_velocity(0).unwrap();
     }
     motor.set_max_decel(TIC_DECEL_DEFAULT).unwrap();
     motor.set_max_accel(TIC_DECEL_DEFAULT).unwrap();
@@ -182,7 +212,7 @@ async fn calibrate_vertical<I: embedded_hal::i2c::I2c>(
 
 /// Calculate most optimal difference in current and destination angle
 fn get_delta_angle(curr_angle: f32, new_angle: f32) -> f32 {
-    let diff: f32 = ((new_angle - curr_angle + 180.0)%360.0) - 180.0;
+    let diff: f32 = ((new_angle - curr_angle + 180.0) % 360.0) - 180.0;
     if diff < -180.0 {
         diff + 360.0 //if angle less than -180 switch directions
     } else {
