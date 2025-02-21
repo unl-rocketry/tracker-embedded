@@ -3,10 +3,6 @@ edition = "2021"
 name    = "tracker-embedded-rs"
 version = "0.1.0"
 
-[[bin]]
-name = "tracker-embedded-rs"
-path = "./src/bin/async_main.rs"
-
 [dependencies]
 critical-section = "1.2.0"
 embassy-executor = { version = "0.7.0", features = ["task-arena-size-20480"] }

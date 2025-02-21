@@ -9,7 +9,7 @@ use esp_hal::{
     clock::CpuClock,
     i2c::{self, master::I2c},
 };
-use esp_println::print;
+use esp_println::{print, println};
 
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
@@ -116,9 +116,8 @@ async fn main(spawner: Spawner) {
             .expect("Motor vertical communication failure");
 
         uart0.read_bytes(&mut buffer).unwrap();
-        print!("{:?}", buffer);
 
-        if buffer[0] == '\n' as u8{
+        if buffer[0] == '\r' as u8 {
             command_string += " ";
             todo!();
             command_string.clear();
@@ -132,8 +131,6 @@ async fn main(spawner: Spawner) {
         }
 
         buffer = [0; 1];
-
-
     }
 }
 
