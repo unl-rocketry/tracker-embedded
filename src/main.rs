@@ -1,15 +1,18 @@
 #![no_main]
 #![no_std]
 
-use core::cell::RefCell;
+mod commands;
+use commands::parse_command;
+
 use alloc::string::String;
+use core::cell::RefCell;
 use embedded_hal_bus::i2c::RefCellDevice;
 use esp_backtrace as _;
 use esp_hal::{
     clock::CpuClock,
     i2c::{self, master::I2c},
 };
-use esp_println::{print, println};
+use esp_println::print;
 
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
@@ -30,8 +33,8 @@ const SPEED_MAX_HORIZONTAL: u32 = 7000000;
 const TIC_DECEL_DEFAULT: u32 = 2000000;
 
 // Offsets calculated manually from accelerometer data
-const ACC_OFFSET_X: i16 =  53 / 8;
-const ACC_OFFSET_Y: i16 =  83 / 8;
+const ACC_OFFSET_X: i16 = 53 / 8;
+const ACC_OFFSET_Y: i16 = 83 / 8;
 const ACC_OFFSET_Z: i16 = -154 / 8;
 
 #[esp_hal_embassy::main]
@@ -78,12 +81,11 @@ async fn main(spawner: Spawner) {
     let _ = accelerometer.set_offset_correction(
         ACC_OFFSET_X as i8,
         ACC_OFFSET_Y as i8,
-        ACC_OFFSET_Z as i8
+        ACC_OFFSET_Z as i8,
     );
 
     let (tx_pin, rx_pin) = (peripherals.GPIO1, peripherals.GPIO3);
-    let config = esp_hal::uart::Config::default()
-        .with_rx_fifo_full_threshold(64);
+    let config = esp_hal::uart::Config::default().with_rx_fifo_full_threshold(64);
 
     let mut uart0 = esp_hal::uart::Uart::new(peripherals.UART0, config)
         .unwrap()
@@ -95,10 +97,14 @@ async fn main(spawner: Spawner) {
 
     Timer::after(Duration::from_secs(1)).await;
 
-    let mut accelerometer = accelerometer.into_active().ok().expect("Accelerometer could not be found!");
+    let mut accelerometer = accelerometer
+        .into_active()
+        .ok()
+        .expect("Accelerometer could not be found!");
     info!("MMA8451 set up!!");
 
-    setup_motor(&mut motor_horizontal, MotorAxis::Horizontal).expect("Horizontal motor setup error");
+    setup_motor(&mut motor_horizontal, MotorAxis::Horizontal)
+        .expect("Horizontal motor setup error");
     setup_motor(&mut motor_vertical, MotorAxis::Vertical).expect("Vertical motor setup error");
     info!("Motors set up!!");
 
@@ -117,16 +123,23 @@ async fn main(spawner: Spawner) {
 
         uart0.read_bytes(&mut buffer).unwrap();
 
-        if buffer[0] == '\r' as u8 {
+        if buffer[0] == b'\r' {
             command_string += " ";
-            todo!();
+            parse_command(
+                &mut motor_vertical,
+                &mut motor_horizontal,
+                &mut accelerometer,
+                command_string.clone(),
+            )
+            .await
+            .expect("");
             command_string.clear();
-        } else if buffer[0] == '\x08' as u8 {
-            if command_string.len() != 0 {
+        } else if buffer[0] == b'\x08' {
+            if !command_string.is_empty() {
                 command_string.remove(command_string.len() - 1);
                 print!(" \x08");
             }
-        } else if  buffer[0] != 0xFF {
+        } else if buffer[0] != 0xFF {
             command_string += &String::from_utf8_lossy(&buffer);
         }
 
@@ -149,7 +162,8 @@ fn calculate_pitch<I: embedded_hal::i2c::I2c>(
     let y = data.x;
     let z = data.z;
 
-    libm::atan2f(-x, libm::powf(y, 2.0) + libm::powf(z, 2.0)) * 57.29577951
+    libm::atan2f(-x, libm::powf(y, 2.0) + libm::powf(z, 2.0))
+        * (180.0 / core::f64::consts::PI as f32)
 }
 
 /// Function to set up motors
@@ -234,4 +248,3 @@ fn get_delta_angle(curr_angle: f32, new_angle: f32) -> f32 {
         diff
     }
 }
-
