@@ -2,6 +2,7 @@
 #![no_std]
 
 use core::cell::RefCell;
+use alloc::string::String;
 use embedded_hal_bus::i2c::RefCellDevice;
 use esp_backtrace as _;
 use esp_hal::{
@@ -101,7 +102,9 @@ async fn main(spawner: Spawner) {
     setup_motor(&mut motor_vertical, MotorAxis::Vertical).expect("Vertical motor setup error");
     info!("Motors set up!!");
 
-    let mut buffer = [0; 64];
+    let mut buffer = [0; 1];
+    let mut command_string = String::new();
+
     loop {
         Timer::after(Duration::from_millis(10)).await;
 
@@ -112,10 +115,25 @@ async fn main(spawner: Spawner) {
             .reset_command_timeout()
             .expect("Motor vertical communication failure");
 
-        uart0.read_buffered_bytes(&mut buffer).unwrap();
+        uart0.read_bytes(&mut buffer).unwrap();
         print!("{:?}", buffer);
 
-        buffer = [0; 64];
+        if buffer[0] == '\n' as u8{
+            command_string += " ";
+            todo!();
+            command_string.clear();
+        } else if buffer[0] == '\x08' as u8 {
+            if command_string.len() != 0 {
+                command_string.remove(command_string.len() - 1);
+                print!(" \x08");
+            }
+        } else if  buffer[0] != 0xFF {
+            command_string += &String::from_utf8_lossy(&buffer);
+        }
+
+        buffer = [0; 1];
+
+
     }
 }
 
@@ -219,3 +237,4 @@ fn get_delta_angle(curr_angle: f32, new_angle: f32) -> f32 {
         diff
     }
 }
+
