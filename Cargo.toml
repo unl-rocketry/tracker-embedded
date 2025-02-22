@@ -4,26 +4,27 @@ name    = "tracker-embedded-rs"
 version = "0.1.0"
 
 [dependencies]
-critical-section = "1.2.0"
-embassy-executor = { version = "0.7.0", features = ["task-arena-size-20480"] }
-embassy-time = { version = "0.4.0", features = ["generic-queue-8"] }
-esp-alloc = { version = "0.6.0" }
-esp-backtrace = { version = "0.15.0", features = [
+critical-section = "1.2"
+embassy-executor = { version = "0.7", features = ["task-arena-size-20480"] }
+embassy-time = { version = "0.4", features = ["generic-queue-8"] }
+esp-alloc = { version = "0.6" }
+esp-backtrace = { version = "0.15", features = [
   "esp32",
   "exception-handler",
   "panic-handler",
   "println",
 ] }
-esp-hal = { version = "0.23.1", features = ["esp32", "unstable"] }
-esp-hal-embassy = { version = "0.6.0", features = ["esp32"] }
-esp-println = { version = "0.13.0", features = ["esp32", "log"] }
-static_cell = { version = "2.1.0", features = ["nightly"] }
-pololu_tic = "0.1.0"
-log = "0.4.25"
-embedded-hal-bus = "0.3.0"
-embedded-hal = "1.0.0"
+esp-hal = { version = "0.23", features = ["esp32", "unstable"] }
+esp-hal-embassy = { version = "0.6", features = ["esp32"] }
+esp-println = { version = "0.13", features = ["esp32", "log"] }
+static_cell = { version = "2.1", features = ["nightly"] }
+pololu_tic = "0.1"
+log = "0.4"
+embedded-hal-bus = "0.3"
+embedded-hal = "1.0"
 mma8x5x = { git = "https://github.com/G2-Games/mma8x5x-rs.git" }
-libm = "0.2.11"
+libm = "0.2"
+thiserror = { version = "2.0", default-features = false }
 
 [profile.dev]
 # Rust debug is too slow.

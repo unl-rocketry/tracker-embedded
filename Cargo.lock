@@ -1032,6 +1032,7 @@ dependencies = [
  "mma8x5x",
  "pololu_tic",
  "static_cell",
+ "thiserror",
 ]
 
 [[package]]

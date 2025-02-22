@@ -121,7 +121,12 @@ async fn main(spawner: Spawner) {
             .reset_command_timeout()
             .expect("Motor vertical communication failure");
 
-        uart0.(&mut buffer).unwrap();
+        let count = uart0.read_buffered_bytes(&mut buffer).unwrap();
+
+        // If there were no bytes read, don't try to use them
+        if count == 0 {
+            continue;
+        }
 
         if buffer[0] == b'\r' {
             println!();
