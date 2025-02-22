@@ -12,7 +12,7 @@ use esp_hal::{
     clock::CpuClock,
     i2c::{self, master::I2c},
 };
-use esp_println::print;
+use esp_println::{print, println};
 
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
@@ -121,9 +121,10 @@ async fn main(spawner: Spawner) {
             .reset_command_timeout()
             .expect("Motor vertical communication failure");
 
-        uart0.read_bytes(&mut buffer).unwrap();
+        uart0.(&mut buffer).unwrap();
 
         if buffer[0] == b'\r' {
+            println!();
             command_string += " ";
             parse_command(
                 &mut motor_vertical,
@@ -140,10 +141,9 @@ async fn main(spawner: Spawner) {
                 print!(" \x08");
             }
         } else if buffer[0] != 0xFF {
-            command_string += &String::from_utf8_lossy(&buffer);
+            print!("{}", buffer[0] as char);
+            command_string.push(buffer[0] as char);
         }
-
-        buffer = [0; 1];
     }
 }
 
@@ -209,14 +209,13 @@ async fn calibrate_vertical<I: embedded_hal::i2c::I2c>(
         }
         pitch_sum /= 20.0;
 
-        info!("{pitch_sum}");
-
         // Prevents movement from erroring out
         motor
             .reset_command_timeout()
             .expect("Motor horizontal communication failure");
 
-        if f64::abs(pitch_sum - ZERO_CAL) < 1.0 {
+        // Slow down after reaching within 0.5 degrees
+        if f64::abs(pitch_sum - ZERO_CAL) < 0.5 {
             target_velocity = -SPEED_VERYSLOW;
             Timer::after(Duration::from_millis(50)).await;
         } else {

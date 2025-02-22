@@ -1,5 +1,6 @@
 use crate::{calibrate_vertical, STEPS_PER_DEGREE_HORIZONTAL, STEPS_PER_DEGREE_VERTICAL};
 use alloc::string::String;
+use core::num::ParseFloatError;
 use esp_println::println;
 use mma8x5x::ic::Mma8451;
 use mma8x5x::{mode, Mma8x5x};
@@ -8,30 +9,48 @@ use pololu_tic::{TicBase, TicI2C};
 #[derive(Debug)]
 pub enum ParseErr {
     Empty,
+    InvalidNumber,
 }
 
 pub async fn parse_command<I: embedded_hal::i2c::I2c>(
     motor_vertical: &mut TicI2C<I>,
     motor_horizontal: &mut TicI2C<I>,
     accel: &mut Mma8x5x<I, Mma8451, mode::Active>,
-    input: String,
+    mut input: String,
 ) -> Result<(), ParseErr> {
     if input.len() == 1 {
         println!("ERR");
         return Err(ParseErr::Empty);
     }
 
-    let arg1: &str = "stuff";
+    input = input.to_ascii_uppercase();
+    let mut arguments = input.split_whitespace();
 
-    match input.as_str() {
+    match arguments.next().unwrap() {
         "DVER" => {
-            todo!()
+            let target_pos = match arguments.next().unwrap().parse::<f32>() {
+                Ok(n) if n < 90.0 || n > 0.0 => n,
+                Err(_) => return Err(ParseErr::InvalidNumber),
+                _ => return Err(ParseErr::InvalidNumber),
+            };
+
+            motor_vertical
+                .set_target_position((target_pos * STEPS_PER_DEGREE_VERTICAL as f32) as i32)
+                .unwrap();
         }
         "DHOR" => {
-            todo!()
+            let target_pos = match arguments.next().unwrap().parse::<f32>() {
+                Ok(n) => n, //TODO fix this
+                Err(_) => return Err(ParseErr::InvalidNumber),
+                _ => return Err(ParseErr::InvalidNumber),
+            };
+
+            motor_horizontal
+                .set_target_position((target_pos * STEPS_PER_DEGREE_HORIZONTAL as f32) as i32)
+                .unwrap();
         }
-        "CALV" => match arg1 {
-            "SET" => {
+        "CALV" => match arguments.next() {
+            Some("SET") => {
                 motor_vertical
                     .halt_and_set_position(0)
                     .expect("TODO: panic message");
