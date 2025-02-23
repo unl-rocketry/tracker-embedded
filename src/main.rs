@@ -252,3 +252,16 @@ fn get_delta_angle(curr_angle: f32, new_angle: f32) -> f32 {
         diff
     }
 }
+
+fn get_relative_angle<I: embedded_hal::i2c::I2c>(motor: &mut TicI2C<I>) -> f32 {
+    let mut curr_angle: f32 =
+        motor.current_position().unwrap() as f32 / STEPS_PER_DEGREE_HORIZONTAL as f32;
+
+    while curr_angle > 180.0 {
+        curr_angle -= 360.0;
+    }
+    while curr_angle < 180.0 {
+        curr_angle += 360.0;
+    }
+    curr_angle
+}
