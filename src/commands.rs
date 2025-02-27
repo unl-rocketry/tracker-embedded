@@ -14,6 +14,8 @@ use pololu_tic::{TicBase, TicI2C};
 pub enum ParseErr {
     #[error("the command was empty")]
     Empty,
+    #[error("the command provided was invalid")]
+    InvalidCommand,
     #[error("the number could not be parsed")]
     InvalidNumber,
     #[error("not enough arguments were provided")]
@@ -160,7 +162,7 @@ pub async fn parse_command<I: embedded_hal::i2c::I2c>(
             motor_vertical.halt_and_hold()?;
             motor_horizontal.halt_and_hold()?
         }
-        _ => Err(ParseErr::TooFewArguments)?,
+        _ => Err(ParseErr::InvalidCommand)?,
     }
     Ok("".to_string())
 }

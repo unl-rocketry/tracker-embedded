@@ -5,7 +5,7 @@ mod commands;
 use commands::parse_command;
 
 use alloc::string::String;
-use core::{cell::RefCell, error::Error};
+use core::cell::RefCell;
 use embedded_hal_bus::i2c::RefCellDevice;
 use esp_backtrace as _;
 use esp_hal::{
@@ -22,15 +22,32 @@ use pololu_tic::{base::TicBase, TicHandlerError, TicI2C, TicProduct, TicStepMode
 
 extern crate alloc;
 
-const STEPS_PER_DEGREE_VERTICAL: u32 = 24;
+const STEPS_PER_DEGREE_VERTICAL: u32 = 24 * tic_step_mult(DEFAULT_STEP_MODE) as u32;
 const STEPS_PER_DEGREE_HORIZONTAL: u32 = 126;
 const SPEED_VERYSLOW: i32 = 200000; //only used on CALV so no need to add a second one
-const SPEED_DEFAULT_VERTICAL: i32 = 7000000;
+const SPEED_DEFAULT_VERTICAL: i32 = 14000000;
 const SPEED_DEFAULT_HORIZONTAL: i32 = 7000000;
-const SPEED_MAX_VERTICAL: u32 = 7000000;
+const SPEED_MAX_VERTICAL: u32 = 14000000;
 const SPEED_MAX_HORIZONTAL: u32 = 7000000;
 
-const TIC_DECEL_DEFAULT: u32 = 2000000;
+const TIC_DECEL_DEFAULT: u32 = 100000;
+
+const DEFAULT_STEP_MODE: TicStepMode = TicStepMode::Half;
+
+pub const fn tic_step_mult(step_mode: TicStepMode) -> u16 {
+    match step_mode {
+        TicStepMode::Full => 1,
+        TicStepMode::Half => 2,
+        TicStepMode::Microstep2_100p => 2,
+        TicStepMode::Microstep4 => 4,
+        TicStepMode::Microstep8 => 8,
+        TicStepMode::Microstep16 => 16,
+        TicStepMode::Microstep32 => 32,
+        TicStepMode::Microstep64 => 64,
+        TicStepMode::Microstep128 => 128,
+        TicStepMode::Microstep256 => 256,
+    }
+}
 
 // Offsets calculated manually from accelerometer data
 const ACC_OFFSET_X: i16 = 53 / 8;
@@ -39,8 +56,6 @@ const ACC_OFFSET_Z: i16 = -154 / 8;
 
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
-    // generator version: 0.2.2
-
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
     esp_alloc::heap_allocator!(72 * 1024);
@@ -140,7 +155,7 @@ async fn main(spawner: Spawner) {
                 command_string.clone(),
             ).await {
                 Ok(s) => print!("OK {}\n", s),
-                Err(e) => print!("ERR {}\n", e),
+                Err(e) => print!("ERR: {:?}, {}\n", e, e),
             }
 
             command_string.clear();
@@ -180,7 +195,7 @@ fn setup_motor<I: embedded_hal::i2c::I2c>(
     motor: &mut TicI2C<I>,
     motor_axis: MotorAxis,
 ) -> Result<(), TicHandlerError> {
-    motor.set_current_limit(2000)?;
+    motor.set_current_limit(1024)?;
     motor.halt_and_set_position(0)?;
     motor.set_max_decel(TIC_DECEL_DEFAULT)?;
     motor.set_max_accel(TIC_DECEL_DEFAULT)?;
@@ -190,7 +205,7 @@ fn setup_motor<I: embedded_hal::i2c::I2c>(
         MotorAxis::Horizontal => motor.set_max_speed(SPEED_MAX_HORIZONTAL)?,
     }
 
-    motor.set_step_mode(TicStepMode::Full)?;
+    motor.set_step_mode(DEFAULT_STEP_MODE)?;
 
     motor.exit_safe_start()?;
 
@@ -244,7 +259,7 @@ async fn calibrate_vertical<I: embedded_hal::i2c::I2c>(
     }
     motor.set_max_decel(TIC_DECEL_DEFAULT).unwrap();
     motor.set_max_accel(TIC_DECEL_DEFAULT).unwrap();
-    motor.set_step_mode(TicStepMode::Full).unwrap();
+    motor.set_step_mode(DEFAULT_STEP_MODE).unwrap();
 }
 
 /// Calculate most optimal difference in current and destination angle
