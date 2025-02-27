@@ -16,23 +16,25 @@ use esp_println::{print, println};
 
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
-use log::info;
+use log::{error, info};
 use mma8x5x::{ic::Mma8451, mode, GScale, Mma8x5x, OutputDataRate, PowerMode};
 use pololu_tic::{base::TicBase, TicHandlerError, TicI2C, TicProduct, TicStepMode};
 
 extern crate alloc;
 
-const STEPS_PER_DEGREE_VERTICAL: u32 = 24 * tic_step_mult(DEFAULT_STEP_MODE) as u32;
-const STEPS_PER_DEGREE_HORIZONTAL: u32 = 126;
+const STEPS_PER_DEGREE_VERTICAL: u32 = (23.7 * tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as f32) as u32;
+const STEPS_PER_DEGREE_HORIZONTAL: u32 = (126.0 * tic_step_mult(DEFAULT_STEP_MODE_HORIZONTAL) as f32) as u32;
 const SPEED_VERYSLOW: i32 = 200000; //only used on CALV so no need to add a second one
-const SPEED_DEFAULT_VERTICAL: i32 = 14000000;
-const SPEED_DEFAULT_HORIZONTAL: i32 = 7000000;
-const SPEED_MAX_VERTICAL: u32 = 14000000;
-const SPEED_MAX_HORIZONTAL: u32 = 7000000;
+const SPEED_DEFAULT_VERTICAL: i32 = 7000000 * tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as i32;
+const SPEED_DEFAULT_HORIZONTAL: i32 = 7000000 * tic_step_mult(DEFAULT_STEP_MODE_HORIZONTAL) as i32;
+const SPEED_MAX_VERTICAL: u32 = 7000000 * tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as u32;
+const SPEED_MAX_HORIZONTAL: u32 = 7000000 * tic_step_mult(DEFAULT_STEP_MODE_HORIZONTAL) as u32;
 
-const TIC_DECEL_DEFAULT: u32 = 100000;
+const TIC_DECEL_DEFAULT_VERTICAL: u32 = 300000 * (tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as u32 / 2);
+const TIC_DECEL_DEFAULT_HORIZONTAL: u32 = 300000;
 
-const DEFAULT_STEP_MODE: TicStepMode = TicStepMode::Half;
+const DEFAULT_STEP_MODE_VERTICAL: TicStepMode = TicStepMode::Microstep16;
+const DEFAULT_STEP_MODE_HORIZONTAL: TicStepMode = TicStepMode::Full;
 
 pub const fn tic_step_mult(step_mode: TicStepMode) -> u16 {
     match step_mode {
@@ -56,7 +58,7 @@ const ACC_OFFSET_Z: i16 = -154 / 8;
 
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
-    let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
+    let config = esp_hal::Config::default().with_cpu_clock(CpuClock::_80MHz);
     let peripherals = esp_hal::init(config);
     esp_alloc::heap_allocator!(72 * 1024);
     esp_println::logger::init_logger_from_env();
@@ -110,8 +112,6 @@ async fn main(spawner: Spawner) {
 
     uart0.set_at_cmd(esp_hal::uart::AtCmdConfig::default().with_cmd_char(0x04));
 
-    Timer::after(Duration::from_secs(1)).await;
-
     let mut accelerometer = accelerometer
         .into_active()
         .ok()
@@ -130,12 +130,18 @@ async fn main(spawner: Spawner) {
     loop {
         Timer::after(Duration::from_millis(10)).await;
 
-        motor_horizontal
-            .reset_command_timeout()
-            .expect("Motor horizontal communication failure");
-        motor_vertical
-            .reset_command_timeout()
-            .expect("Motor vertical communication failure");
+        if motor_horizontal.reset_command_timeout().is_err() {
+            loop {
+                error!("Horizontal motor communication failure");
+                Timer::after(Duration::from_secs(1)).await;
+            }
+        }
+        if motor_vertical.reset_command_timeout().is_err() {
+            loop {
+                error!("Vertical motor communication failure");
+                Timer::after(Duration::from_secs(1)).await;
+            }
+        }
 
         let count = uart0.read_buffered_bytes(&mut buffer).unwrap();
 
@@ -144,7 +150,7 @@ async fn main(spawner: Spawner) {
             continue;
         }
 
-        if buffer[0] == b'\r' {
+        if buffer[0] == b'\r' || buffer[0] == b'\n' {
             println!();
             command_string += " ";
 
@@ -152,7 +158,7 @@ async fn main(spawner: Spawner) {
                 &mut motor_vertical,
                 &mut motor_horizontal,
                 &mut accelerometer,
-                command_string.clone(),
+                &command_string,
             ).await {
                 Ok(s) => print!("OK {}\n", s),
                 Err(e) => print!("ERR: {:?}, {}\n", e, e),
@@ -197,15 +203,21 @@ fn setup_motor<I: embedded_hal::i2c::I2c>(
 ) -> Result<(), TicHandlerError> {
     motor.set_current_limit(1024)?;
     motor.halt_and_set_position(0)?;
-    motor.set_max_decel(TIC_DECEL_DEFAULT)?;
-    motor.set_max_accel(TIC_DECEL_DEFAULT)?;
 
     match motor_axis {
-        MotorAxis::Vertical => motor.set_max_speed(SPEED_MAX_VERTICAL)?,
-        MotorAxis::Horizontal => motor.set_max_speed(SPEED_MAX_HORIZONTAL)?,
+        MotorAxis::Vertical => {
+            motor.set_max_decel(TIC_DECEL_DEFAULT_VERTICAL)?;
+            motor.set_max_accel(TIC_DECEL_DEFAULT_VERTICAL)?;
+            motor.set_max_speed(SPEED_MAX_VERTICAL)?;
+            motor.set_step_mode(DEFAULT_STEP_MODE_VERTICAL)?;
+        },
+        MotorAxis::Horizontal => {
+            motor.set_max_decel(TIC_DECEL_DEFAULT_HORIZONTAL)?;
+            motor.set_max_accel(TIC_DECEL_DEFAULT_HORIZONTAL)?;
+            motor.set_max_speed(SPEED_MAX_HORIZONTAL)?;
+            motor.set_step_mode(DEFAULT_STEP_MODE_HORIZONTAL)?;
+        },
     }
-
-    motor.set_step_mode(DEFAULT_STEP_MODE)?;
 
     motor.exit_safe_start()?;
 
@@ -243,7 +255,7 @@ async fn calibrate_vertical<I: embedded_hal::i2c::I2c>(
             target_velocity = -SPEED_VERYSLOW;
             Timer::after(Duration::from_millis(50)).await;
         } else {
-            target_velocity = -SPEED_DEFAULT_VERTICAL;
+            target_velocity = -7000000;
         }
 
         if pitch_sum <= -0.02 {
@@ -257,9 +269,9 @@ async fn calibrate_vertical<I: embedded_hal::i2c::I2c>(
         Timer::after(Duration::from_millis(200)).await;
         motor.set_target_velocity(0).unwrap();
     }
-    motor.set_max_decel(TIC_DECEL_DEFAULT).unwrap();
-    motor.set_max_accel(TIC_DECEL_DEFAULT).unwrap();
-    motor.set_step_mode(DEFAULT_STEP_MODE).unwrap();
+    motor.set_max_decel(TIC_DECEL_DEFAULT_VERTICAL).unwrap();
+    motor.set_max_accel(TIC_DECEL_DEFAULT_VERTICAL).unwrap();
+    motor.set_step_mode(DEFAULT_STEP_MODE_VERTICAL).unwrap();
 }
 
 /// Calculate most optimal difference in current and destination angle

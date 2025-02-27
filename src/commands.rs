@@ -28,13 +28,13 @@ pub async fn parse_command<I: embedded_hal::i2c::I2c>(
     motor_vertical: &mut TicI2C<I>,
     motor_horizontal: &mut TicI2C<I>,
     accel: &mut Mma8x5x<I, Mma8451, mode::Active>,
-    mut input: String,
+    input: &String,
 ) -> Result<String, ParseErr> {
     if input.len() == 1 {
         return Err(ParseErr::Empty);
     }
 
-    input = input.to_ascii_uppercase();
+    let input = input.to_ascii_uppercase();
     let mut arguments = input.split_whitespace();
 
     match arguments.next().unwrap() {
