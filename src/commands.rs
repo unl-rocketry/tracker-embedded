@@ -3,7 +3,8 @@ use crate::{
     SPEED_DEFAULT_VERTICAL, SPEED_MAX_HORIZONTAL, SPEED_MAX_VERTICAL, STEPS_PER_DEGREE_HORIZONTAL,
     STEPS_PER_DEGREE_VERTICAL,
 };
-use alloc::string::String;
+use alloc::format;
+use alloc::string::{String, ToString};
 use esp_println::println;
 use mma8x5x::ic::Mma8451;
 use mma8x5x::{mode, Mma8x5x};
@@ -26,9 +27,8 @@ pub async fn parse_command<I: embedded_hal::i2c::I2c>(
     motor_horizontal: &mut TicI2C<I>,
     accel: &mut Mma8x5x<I, Mma8451, mode::Active>,
     mut input: String,
-) -> Result<(), ParseErr> {
+) -> Result<String, ParseErr> {
     if input.len() == 1 {
-        println!("ERR");
         return Err(ParseErr::Empty);
     }
 
@@ -74,7 +74,7 @@ pub async fn parse_command<I: embedded_hal::i2c::I2c>(
                 Err(_) => Err(ParseErr::TooFewArguments)?,
             };
             let current_position = motor_vertical.current_position()? as f32;
-            let move_to = current_position - steps_to_move;
+            let move_to = current_position + steps_to_move;
             motor_vertical.set_target_position(move_to as i32)?;
         }
         "MOVH" => {
@@ -97,7 +97,7 @@ pub async fn parse_command<I: embedded_hal::i2c::I2c>(
             while horizontal_position < -180.0 {
                 horizontal_position += 360.0;
             }
-            println!("{} {}", vertical_position, horizontal_position);
+            return Ok(format!("{} {}", vertical_position, horizontal_position));
         }
         "INFO" => {
             let command_list = [
@@ -112,6 +112,7 @@ pub async fn parse_command<I: embedded_hal::i2c::I2c>(
                 "GSPD",
                 "HALT",
             ];
+
             for command in command_list {
                 println!("  {}", command);
             }
@@ -149,11 +150,11 @@ pub async fn parse_command<I: embedded_hal::i2c::I2c>(
             }
         },
         "GSPD" => {
-            println!(
+            return Ok(format!(
                 "{} {}",
                 motor_vertical.max_speed()?,
                 motor_horizontal.max_speed()?
-            );
+            ));
         }
         "HALT" => {
             motor_vertical.halt_and_hold()?;
@@ -161,5 +162,5 @@ pub async fn parse_command<I: embedded_hal::i2c::I2c>(
         }
         _ => Err(ParseErr::TooFewArguments)?,
     }
-    Ok(())
+    Ok("".to_string())
 }

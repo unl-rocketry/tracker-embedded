@@ -5,7 +5,7 @@ mod commands;
 use commands::parse_command;
 
 use alloc::string::String;
-use core::cell::RefCell;
+use core::{cell::RefCell, error::Error};
 use embedded_hal_bus::i2c::RefCellDevice;
 use esp_backtrace as _;
 use esp_hal::{
@@ -111,6 +111,7 @@ async fn main(spawner: Spawner) {
     let mut buffer = [0; 1];
     let mut command_string = String::new();
 
+
     loop {
         Timer::after(Duration::from_millis(10)).await;
 
@@ -131,19 +132,22 @@ async fn main(spawner: Spawner) {
         if buffer[0] == b'\r' {
             println!();
             command_string += " ";
-            parse_command(
+
+            match parse_command(
                 &mut motor_vertical,
                 &mut motor_horizontal,
                 &mut accelerometer,
                 command_string.clone(),
-            )
-            .await
-            .expect("");
+            ).await {
+                Ok(s) => print!("OK {}\n", s),
+                Err(e) => print!("ERR {}\n", e),
+            }
+
             command_string.clear();
         } else if buffer[0] == b'\x08' {
             if !command_string.is_empty() {
                 command_string.remove(command_string.len() - 1);
-                print!(" \x08");
+                print!("\x08 \x08");
             }
         } else if buffer[0] != 0xFF {
             print!("{}", buffer[0] as char);
