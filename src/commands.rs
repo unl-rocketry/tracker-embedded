@@ -28,7 +28,7 @@ pub async fn parse_command<I: embedded_hal::i2c::I2c>(
     motor_vertical: &mut TicI2C<I>,
     motor_horizontal: &mut TicI2C<I>,
     accel: &mut Mma8x5x<I, Mma8451, mode::Active>,
-    input: &String,
+    input: &str,
 ) -> Result<String, ParseErr> {
     if input.len() == 1 {
         return Err(ParseErr::Empty);
