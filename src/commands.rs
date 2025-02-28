@@ -16,28 +16,35 @@ pub enum ParseErr {
     Empty,
     #[error("the command provided was invalid")]
     InvalidCommand,
+    #[error("the argument provided was invalid")]
+    InvalidArgument,
     #[error("the number could not be parsed")]
     InvalidNumber,
     #[error("not enough arguments were provided")]
     TooFewArguments,
     #[error("the motor controllers experienced an error")]
     InternalError(#[from] pololu_tic::TicHandlerError),
+    #[error("the vertical position has not been calibrated.")]
+    Uncalibrated,
 }
+
+const BLACKLIST: &[&str] = &["DVER", "DHOR"];
 
 pub async fn parse_command<I: embedded_hal::i2c::I2c>(
     motor_vertical: &mut TicI2C<I>,
     motor_horizontal: &mut TicI2C<I>,
     accel: &mut Mma8x5x<I, Mma8451, mode::Active>,
     input: &str,
+    is_calibrated: &mut bool,
 ) -> Result<String, ParseErr> {
-    if input.len() == 1 {
-        return Err(ParseErr::Empty);
+    let input = input.to_ascii_uppercase();
+    let mut arguments = input.split_whitespace().peekable();
+
+    if !*is_calibrated && arguments.peek().is_some_and(|a| BLACKLIST.contains(a)) {
+        return Err(ParseErr::Uncalibrated);
     }
 
-    let input = input.to_ascii_uppercase();
-    let mut arguments = input.split_whitespace();
-
-    match arguments.next().unwrap() {
+    match arguments.next().ok_or(ParseErr::Empty)? {
         "DVER" => {
             let target_pos = match arguments
                 .next()
@@ -52,7 +59,11 @@ pub async fn parse_command<I: embedded_hal::i2c::I2c>(
                 .set_target_position((target_pos * STEPS_PER_DEGREE_VERTICAL as f32) as i32)?;
         }
         "DHOR" => {
-            let target_pos = match arguments.next().unwrap().parse::<f32>() {
+            let target_pos = match arguments
+                .next()
+                .ok_or(ParseErr::TooFewArguments)?
+                .parse::<f32>()
+            {
                 Ok(n) => n.clamp(-180.0, 180.0),
                 _ => return Err(ParseErr::InvalidNumber),
             };
@@ -64,14 +75,22 @@ pub async fn parse_command<I: embedded_hal::i2c::I2c>(
         "CALV" => match arguments.next() {
             Some("SET") => {
                 motor_vertical.halt_and_set_position(0)?;
+                *is_calibrated = true;
             }
-            _ => calibrate_vertical(motor_vertical, accel).await,
+            _ => {
+                calibrate_vertical(motor_vertical, accel).await;
+                *is_calibrated = true;
+            }
         },
         "CALH" => {
             motor_horizontal.halt_and_set_position(0)?;
         }
         "MOVV" => {
-            let steps_to_move = match arguments.next().unwrap().parse::<f32>() {
+            let steps_to_move = match arguments
+                .next()
+                .ok_or(ParseErr::TooFewArguments)?
+                .parse::<f32>()
+            {
                 Ok(n) => n,
                 Err(_) => Err(ParseErr::TooFewArguments)?,
             };
@@ -80,7 +99,11 @@ pub async fn parse_command<I: embedded_hal::i2c::I2c>(
             motor_vertical.set_target_position(move_to as i32)?;
         }
         "MOVH" => {
-            let steps_to_move = match arguments.next().unwrap().parse::<f32>() {
+            let steps_to_move = match arguments
+                .next()
+                .ok_or(ParseErr::TooFewArguments)?
+                .parse::<f32>()
+            {
                 Ok(n) => n,
                 Err(_) => Err(ParseErr::TooFewArguments)?,
             };
@@ -121,7 +144,11 @@ pub async fn parse_command<I: embedded_hal::i2c::I2c>(
         }
         "SSPD" => match arguments.next() {
             Some("VER") => {
-                let new_speed = match arguments.next().unwrap().parse::<f32>() {
+                let new_speed = match arguments
+                    .next()
+                    .ok_or(ParseErr::TooFewArguments)?
+                    .parse::<f32>()
+                {
                     Ok(n) => n,
                     Err(_) => Err(ParseErr::TooFewArguments)?,
                 };
@@ -129,7 +156,11 @@ pub async fn parse_command<I: embedded_hal::i2c::I2c>(
                     .set_max_speed(new_speed.clamp(0.0, SPEED_MAX_VERTICAL as f32) as u32)?;
             }
             Some("HOR") => {
-                let new_speed = match arguments.next().unwrap().parse::<f32>() {
+                let new_speed = match arguments
+                    .next()
+                    .ok_or(ParseErr::TooFewArguments)?
+                    .parse::<f32>()
+                {
                     Ok(n) => n,
                     Err(_) => Err(ParseErr::TooFewArguments)?,
                 };
@@ -140,8 +171,8 @@ pub async fn parse_command<I: embedded_hal::i2c::I2c>(
                 motor_vertical.set_max_speed(SPEED_DEFAULT_VERTICAL as u32)?;
                 motor_horizontal.set_max_speed(SPEED_DEFAULT_HORIZONTAL as u32)?;
             }
-            _ => {
-                let new_speed = match arguments.next().unwrap().parse::<f32>() {
+            Some(int) => {
+                let new_speed = match int.parse::<f32>() {
                     Ok(n) => n,
                     Err(_) => Err(ParseErr::TooFewArguments)?,
                 };
@@ -150,6 +181,7 @@ pub async fn parse_command<I: embedded_hal::i2c::I2c>(
                 motor_horizontal
                     .set_max_speed(new_speed.clamp(0.0, SPEED_MAX_HORIZONTAL as f32) as u32)?;
             }
+            _ => return Err(ParseErr::InvalidArgument),
         },
         "GSPD" => {
             return Ok(format!(
