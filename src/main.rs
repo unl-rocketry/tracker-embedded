@@ -23,23 +23,24 @@ use pololu_tic::{base::TicBase, TicHandlerError, TicI2C, TicProduct, TicStepMode
 extern crate alloc;
 
 const STEPS_PER_DEGREE_VERTICAL: u32 =
-    (23.6 * tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as f32) as u32;
+    (23.3 * tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as f32) as u32;
 const STEPS_PER_DEGREE_HORIZONTAL: u32 =
     (126.0 * tic_step_mult(DEFAULT_STEP_MODE_HORIZONTAL) as f32) as u32;
-const SPEED_VERYSLOW: i32 = 200000; //only used on CALV so no need to add a second one
-const SPEED_DEFAULT_VERTICAL: i32 = 7000000 * tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as i32;
-const SPEED_DEFAULT_HORIZONTAL: i32 = 7000000 * tic_step_mult(DEFAULT_STEP_MODE_HORIZONTAL) as i32;
-const SPEED_MAX_VERTICAL: u32 = 7000000 * tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as u32;
-const SPEED_MAX_HORIZONTAL: u32 = 7000000 * tic_step_mult(DEFAULT_STEP_MODE_HORIZONTAL) as u32;
+const SPEED_VERYSLOW: i32 = 100000 * tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as i32; //only used on CALV so no need to add a second one
+const SPEED_DEFAULT_VERTICAL: i32 = 15000000 * tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as i32;
+const SPEED_DEFAULT_HORIZONTAL: i32 = 10000000 * tic_step_mult(DEFAULT_STEP_MODE_HORIZONTAL) as i32;
+const SPEED_MAX_VERTICAL: u32 = 15000000 * tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as u32;
+const SPEED_MAX_HORIZONTAL: u32 = 10000000 * tic_step_mult(DEFAULT_STEP_MODE_HORIZONTAL) as u32;
 
 const TIC_DECEL_DEFAULT_VERTICAL: u32 =
-    300000 * (tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as u32 / 2);
-const TIC_DECEL_DEFAULT_HORIZONTAL: u32 = 300000;
+    400000 * (tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as u32 / 2);
+const TIC_DECEL_DEFAULT_HORIZONTAL: u32 =
+    300000 * tic_step_mult(DEFAULT_STEP_MODE_HORIZONTAL) as u32;
 
 const DEFAULT_CURRENT: u16 = 1024;
 
 const DEFAULT_STEP_MODE_VERTICAL: TicStepMode = TicStepMode::Microstep16;
-const DEFAULT_STEP_MODE_HORIZONTAL: TicStepMode = TicStepMode::Full;
+const DEFAULT_STEP_MODE_HORIZONTAL: TicStepMode = TicStepMode::Microstep8;
 
 pub const fn tic_step_mult(step_mode: TicStepMode) -> u16 {
     match step_mode {
