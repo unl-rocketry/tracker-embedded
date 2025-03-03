@@ -26,7 +26,7 @@ const STEPS_PER_DEGREE_VERTICAL: u32 =
     (23.3 * tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as f32) as u32;
 const STEPS_PER_DEGREE_HORIZONTAL: u32 =
     (126.0 * tic_step_mult(DEFAULT_STEP_MODE_HORIZONTAL) as f32) as u32;
-const SPEED_VERYSLOW: i32 = 100000 * tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as i32; //only used on CALV so no need to add a second one
+const SPEED_VERYSLOW: i32 = 20000 * tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as i32; //only used on CALV so no need to add a second one
 const SPEED_DEFAULT_VERTICAL: i32 = 15000000 * tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as i32;
 const SPEED_DEFAULT_HORIZONTAL: i32 = 10000000 * tic_step_mult(DEFAULT_STEP_MODE_HORIZONTAL) as i32;
 const SPEED_MAX_VERTICAL: u32 = 15000000 * tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as u32;
