@@ -22,19 +22,25 @@ use pololu_tic::{base::TicBase, TicHandlerError, TicI2C, TicProduct, TicStepMode
 
 extern crate alloc;
 
-const STEPS_PER_DEGREE_VERTICAL: u32 = (23.7 * tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as f32) as u32;
-const STEPS_PER_DEGREE_HORIZONTAL: u32 = (126.0 * tic_step_mult(DEFAULT_STEP_MODE_HORIZONTAL) as f32) as u32;
-const SPEED_VERYSLOW: i32 = 200000; //only used on CALV so no need to add a second one
-const SPEED_DEFAULT_VERTICAL: i32 = 7000000 * tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as i32;
-const SPEED_DEFAULT_HORIZONTAL: i32 = 7000000 * tic_step_mult(DEFAULT_STEP_MODE_HORIZONTAL) as i32;
-const SPEED_MAX_VERTICAL: u32 = 7000000 * tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as u32;
-const SPEED_MAX_HORIZONTAL: u32 = 7000000 * tic_step_mult(DEFAULT_STEP_MODE_HORIZONTAL) as u32;
+const STEPS_PER_DEGREE_VERTICAL: u32 =
+    (23.3 * tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as f32) as u32;
+const STEPS_PER_DEGREE_HORIZONTAL: u32 =
+    (126.0 * tic_step_mult(DEFAULT_STEP_MODE_HORIZONTAL) as f32) as u32;
+const SPEED_VERYSLOW: i32 = 20000 * tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as i32; //only used on CALV so no need to add a second one
+const SPEED_DEFAULT_VERTICAL: i32 = 15000000 * tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as i32;
+const SPEED_DEFAULT_HORIZONTAL: i32 = 10000000 * tic_step_mult(DEFAULT_STEP_MODE_HORIZONTAL) as i32;
+const SPEED_MAX_VERTICAL: u32 = 15000000 * tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as u32;
+const SPEED_MAX_HORIZONTAL: u32 = 10000000 * tic_step_mult(DEFAULT_STEP_MODE_HORIZONTAL) as u32;
 
-const TIC_DECEL_DEFAULT_VERTICAL: u32 = 300000 * (tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as u32 / 2);
-const TIC_DECEL_DEFAULT_HORIZONTAL: u32 = 300000;
+const TIC_DECEL_DEFAULT_VERTICAL: u32 =
+    400000 * (tic_step_mult(DEFAULT_STEP_MODE_VERTICAL) as u32 / 2);
+const TIC_DECEL_DEFAULT_HORIZONTAL: u32 =
+    300000 * tic_step_mult(DEFAULT_STEP_MODE_HORIZONTAL) as u32;
+
+const DEFAULT_CURRENT: u16 = 1024;
 
 const DEFAULT_STEP_MODE_VERTICAL: TicStepMode = TicStepMode::Microstep16;
-const DEFAULT_STEP_MODE_HORIZONTAL: TicStepMode = TicStepMode::Full;
+const DEFAULT_STEP_MODE_HORIZONTAL: TicStepMode = TicStepMode::Microstep8;
 
 pub const fn tic_step_mult(step_mode: TicStepMode) -> u16 {
     match step_mode {
@@ -123,9 +129,10 @@ async fn main(spawner: Spawner) {
     setup_motor(&mut motor_vertical, MotorAxis::Vertical).expect("Vertical motor setup error");
     info!("Motors set up!!");
 
+    let mut is_calibrated = false;
+
     let mut buffer = [0; 1];
     let mut command_string = String::new();
-
 
     loop {
         Timer::after(Duration::from_millis(10)).await;
@@ -150,6 +157,23 @@ async fn main(spawner: Spawner) {
             continue;
         }
 
+        if buffer[0] == b'\x1B' {
+            command_string.clear();
+            match parse_command(
+                &mut motor_vertical,
+                &mut motor_horizontal,
+                &mut accelerometer,
+                "HALT ",
+                &mut is_calibrated,
+            )
+            .await
+            {
+                Ok(_) => print!("OK SOFTWARE E-STOP (ESC RECIEVED)\n"),
+                Err(e) => print!("ERR: {:?}, {}\n", e, e),
+            }
+            continue;
+        }
+
         if buffer[0] == b'\r' || buffer[0] == b'\n' {
             println!();
             command_string += " ";
@@ -159,7 +183,10 @@ async fn main(spawner: Spawner) {
                 &mut motor_horizontal,
                 &mut accelerometer,
                 &command_string,
-            ).await {
+                &mut is_calibrated,
+            )
+            .await
+            {
                 Ok(s) => print!("OK {}\n", s),
                 Err(e) => print!("ERR: {:?}, {}\n", e, e),
             }
@@ -201,7 +228,7 @@ fn setup_motor<I: embedded_hal::i2c::I2c>(
     motor: &mut TicI2C<I>,
     motor_axis: MotorAxis,
 ) -> Result<(), TicHandlerError> {
-    motor.set_current_limit(1024)?;
+    motor.set_current_limit(DEFAULT_CURRENT)?;
     motor.halt_and_set_position(0)?;
 
     match motor_axis {
@@ -210,13 +237,13 @@ fn setup_motor<I: embedded_hal::i2c::I2c>(
             motor.set_max_accel(TIC_DECEL_DEFAULT_VERTICAL)?;
             motor.set_max_speed(SPEED_MAX_VERTICAL)?;
             motor.set_step_mode(DEFAULT_STEP_MODE_VERTICAL)?;
-        },
+        }
         MotorAxis::Horizontal => {
             motor.set_max_decel(TIC_DECEL_DEFAULT_HORIZONTAL)?;
             motor.set_max_accel(TIC_DECEL_DEFAULT_HORIZONTAL)?;
             motor.set_max_speed(SPEED_MAX_HORIZONTAL)?;
             motor.set_step_mode(DEFAULT_STEP_MODE_HORIZONTAL)?;
-        },
+        }
     }
 
     motor.exit_safe_start()?;
